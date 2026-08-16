@@ -1,385 +1,318 @@
-debugX = true
+debugX = true -- Enable debug mode for Delta
 
--- Загрузка Rayfield
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Create main window
 local Window = Rayfield:CreateWindow({
-   Name = "ESP & Fog Control",
+   Name = "Entrenched - Delta Hub",
    Icon = 0,
-   LoadingTitle = "Загрузка...",
-   LoadingSubtitle = "by YourName",
-   Theme = "Default",
+   LoadingTitle = "Loading Entrenched Hub...",
+   LoadingSubtitle = "by Delta",
+   Theme = "Dark",
    DisableRayfieldPrompts = false,
    DisableBuildWarnings = false,
    ConfigurationSaving = {
       Enabled = true,
-      FolderName = "ESP_Hub",
-      FileName = "Settings"
+      FolderName = "EntrenchedDelta",
+      FileName = "Config"
    },
    Discord = {
       Enabled = false,
-      Invite = "noinvitelink",
+      Invite = "",
       RememberJoins = true
    },
-   KeySystem = true,
-   KeySettings = {
-      Title = "Введите ключ",
-      Subtitle = "Ключ доступа",
-      Note = "Ключ: 123",
-      FileName = "ESP_Key",
-      SaveKey = true,
-      GrabKeyFromSite = false,
-      Key = {"123"}
-   }
+   KeySystem = false
 })
 
-local Tab = Window:CreateTab("ESP", 4483362458)
+-- ======== TABS ========
+local CombatTab = Window:CreateTab("Combat", 4483362458) -- rifle icon
+local VisualsTab = Window:CreateTab("Visuals", 4483362458)
+local PlayerTab = Window:CreateTab("Player", 4483362458)
+local MiscTab = Window:CreateTab("Misc", 4483362458)
 
--- Состояния
-local espEnabled = false
-local showNames = false
-local fogOff = false
-
--- Списки команд (заполняются через дропдауны, могут содержать несколько названий)
-local enemyTeams = {}
-local allyTeams = {}
-
--- Цвета
-local enemyColor = Color3.fromRGB(255, 0, 0)
-local allyColor = Color3.fromRGB(0, 255, 0)
-
--- Хранилище объектов ESP
-local espObjects = {}
-
--- Подписки на события
-local espConnections = {}
-
--- Флаг для остановки цикла обновления (если понадобится)
-local updateRunning = false
-local updateConnection = nil
-
--- Вспомогательная функция поиска в таблице
-local function tableFind(tbl, value)
-   for _, v in pairs(tbl) do
-      if v == value then return true end
-   end
-   return false
-end
-
--- Определение враг/союзник на основе выбранных команд
-local function isEnemy(player)
-   local team = player.Team
-   local teamName = team and team.Name or nil
-   if teamName then
-      if tableFind(enemyTeams, teamName) then
-         return true
-      elseif tableFind(allyTeams, teamName) then
-         return false
-      end
-   end
-   return true  -- по умолчанию враг
-end
-
--- Очистка всех ESP-объектов
-local function clearESP()
-   for _, data in pairs(espObjects) do
-      if data.highlight then data.highlight:Destroy() end
-      if data.billboard then data.billboard:Destroy() end
-   end
-   espObjects = {}
-end
-
--- Обновление ESP для одного игрока (создаём или обновляем)
-local function updateESPForPlayer(player)
-   if not player or not player.Character then return end
-   local character = player.Character
-   local data = espObjects[player]
-
-   if not espEnabled then
-      if data then
-         if data.highlight then data.highlight:Destroy() end
-         if data.billboard then data.billboard:Destroy() end
-         espObjects[player] = nil
-      end
-      return
-   end
-
-   if not data then
-      data = {}
-      espObjects[player] = data
-   end
-
-   local color = isEnemy(player) and enemyColor or allyColor
-
-   -- Highlight
-   if not data.highlight then
-      local highlight = Instance.new("Highlight")
-      highlight.Adornee = character
-      highlight.FillColor = color
-      highlight.FillTransparency = 0.5
-      highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-      highlight.OutlineTransparency = 0
-      highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-      highlight.Parent = character
-      data.highlight = highlight
-   else
-      data.highlight.FillColor = color
-   end
-
-   -- Billboard (имена + здоровье)
-   if showNames then
-      if not data.billboard then
-         local bill = Instance.new("BillboardGui")
-         bill.Adornee = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart") or character
-         bill.Size = UDim2.new(0, 200, 0, 50)
-         bill.StudsOffset = Vector3.new(0, 2.5, 0)
-         bill.AlwaysOnTop = true
-         bill.Parent = character
-
-         local label = Instance.new("TextLabel")
-         label.Size = UDim2.new(1, 0, 1, 0)
-         label.BackgroundTransparency = 1
-         label.TextScaled = true
-         label.TextColor3 = color
-         label.Font = Enum.Font.GothamBold
-         label.TextStrokeTransparency = 0.5
-         label.Parent = bill
-
-         data.billboard = bill
-         data.label = label
-      else
-         data.label.TextColor3 = color
-      end
-      local humanoid = character:FindFirstChild("Humanoid")
-      local health = humanoid and math.floor(humanoid.Health) or "?"
-      data.label.Text = player.Name .. "  ❤️" .. health
-   else
-      if data.billboard then
-         data.billboard:Destroy()
-         data.billboard = nil
-         data.label = nil
-      end
-   end
-end
-
--- Обновить всех игроков (полная перезагрузка)
-local function refreshAllESP()
-   clearESP()
-   if espEnabled then
-      for _, player in pairs(game.Players:GetPlayers()) do
-         if player ~= game.Players.LocalPlayer then
-            updateESPForPlayer(player)
-         end
-      end
-   end
-end
-
--- Подписка на события появления/исчезновения игроков
-local function setupConnections()
-   for _, conn in pairs(espConnections) do conn:Disconnect() end
-   espConnections = {}
-
-   espConnections[#espConnections+1] = game.Players.PlayerAdded:Connect(function(player)
-      if espEnabled then
-         player.CharacterAdded:Connect(function()
-            task.wait(0.3)
-            updateESPForPlayer(player)
+-- ======== COMBAT TAB ========
+local CombatSection = CombatTab:CreateSection("Aimbot")
+local AimbotToggle = CombatTab:CreateToggle({
+   Name = "Aimbot",
+   CurrentValue = false,
+   Flag = "Aimbot",
+   Callback = function(Value)
+      getgenv().AimbotEnabled = Value
+      if Value then
+         spawn(function()
+            while getgenv().AimbotEnabled do
+               pcall(function()
+                  local Players = game:GetService("Players")
+                  local LocalPlayer = Players.LocalPlayer
+                  local Character = LocalPlayer.Character
+                  if not Character or not Character:FindFirstChild("Humanoid") then wait(0.5) continue end
+                  local Camera = workspace.CurrentCamera
+                  local Closest = nil
+                  local ClosestDist = math.huge
+                  for _, v in pairs(Players:GetPlayers()) do
+                     if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+                        local Head = v.Character:FindFirstChild("Head")
+                        if Head then
+                           local ScreenPos, OnScreen = Camera:WorldToScreenPoint(Head.Position)
+                           if OnScreen then
+                              local Dist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+                              if Dist < ClosestDist then
+                                 Closest = v
+                                 ClosestDist = Dist
+                              end
+                           end
+                        end
+                     end
+                  end
+                  if Closest and Closest.Character and Closest.Character:FindFirstChild("Head") then
+                     local HeadPos = Closest.Character.Head.Position
+                     Camera.CFrame = CFrame.new(Camera.CFrame.Position, HeadPos)
+                  end
+               end)
+               wait()
+            end
          end)
-         if player.Character then
-            task.wait(0.3)
-            updateESPForPlayer(player)
+      end
+   end
+})
+
+local AimbotFOV = CombatTab:CreateSlider({
+   Name = "Aimbot FOV",
+   Range = {0, 180},
+   Increment = 1,
+   Suffix = "°",
+   CurrentValue = 90,
+   Flag = "AimbotFOV",
+   Callback = function(Value)
+      getgenv().AimbotFOV = Value
+   end
+})
+
+CombatTab:CreateSection("Weapon Mods")
+local NoRecoil = CombatTab:CreateToggle({
+   Name = "No Recoil",
+   CurrentValue = false,
+   Flag = "NoRecoil",
+   Callback = function(Value)
+      getgenv().NoRecoil = Value
+      if Value then
+         -- Implement no recoil (example: hook to weapon recoil property)
+         game:GetService("RunService").RenderStepped:Connect(function()
+            if getgenv().NoRecoil then
+               pcall(function()
+                  local char = game.Players.LocalPlayer.Character
+                  if char and char:FindFirstChild("Humanoid") then
+                     -- Adjust based on actual weapon system; this is generic
+                     local tool = char:FindFirstChildOfClass("Tool")
+                     if tool and tool:FindFirstChild("Recoil") then
+                        tool.Recoil.Value = 0
+                     end
+                  end
+               end)
+            end
+         end)
+      end
+   end
+})
+
+local InfiniteAmmo = CombatTab:CreateToggle({
+   Name = "Infinite Ammo",
+   CurrentValue = false,
+   Flag = "InfiniteAmmo",
+   Callback = function(Value)
+      getgenv().InfiniteAmmo = Value
+      game:GetService("RunService").Stepped:Connect(function()
+         if getgenv().InfiniteAmmo then
+            pcall(function()
+               local char = game.Players.LocalPlayer.Character
+               if char then
+                  for _, tool in pairs(char:GetChildren()) do
+                     if tool:IsA("Tool") and tool:FindFirstChild("Ammo") then
+                        tool.Ammo.Value = tool.Ammo.MaxValue
+                     end
+                  end
+               end
+            end)
+         end
+      end)
+   end
+})
+
+-- ======== VISUALS TAB ========
+local VisualsSection = VisualsTab:CreateSection("ESP")
+local ESPToggle = VisualsTab:CreateToggle({
+   Name = "ESP Boxes",
+   CurrentValue = false,
+   Flag = "ESP",
+   Callback = function(Value)
+      getgenv().ESPEnabled = Value
+      if Value then
+         spawn(function()
+            while getgenv().ESPEnabled do
+               pcall(function()
+                  local Players = game:GetService("Players")
+                  local LocalPlayer = Players.LocalPlayer
+                  for _, v in pairs(Players:GetPlayers()) do
+                     if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+                        local head = v.Character:FindFirstChild("Head")
+                        if head then
+                           local pos, onScreen = workspace.CurrentCamera:WorldToScreenPoint(head.Position)
+                           if onScreen then
+                              -- Simple box drawing (use Drawing library)
+                              local box = Drawing.new("Square")
+                              box.Visible = true
+                              box.Color = Color3.fromRGB(255, 0, 0)
+                              box.Thickness = 2
+                              box.Size = Vector2.new(50, 100)
+                              box.Position = Vector2.new(pos.X - 25, pos.Y - 50)
+                              -- Store in table to clean up
+                              if not getgenv().ESPObjects then getgenv().ESPObjects = {} end
+                              table.insert(getgenv().ESPObjects, box)
+                           end
+                        end
+                     end
+                  end
+               end)
+               wait(0.1)
+            end
+         end)
+      else
+         -- Clean up drawings
+         if getgenv().ESPObjects then
+            for _, obj in pairs(getgenv().ESPObjects) do
+               obj:Remove()
+            end
+            getgenv().ESPObjects = {}
          end
       end
-   end)
+   end
+})
 
-   espConnections[#espConnections+1] = game.Players.PlayerRemoving:Connect(function(player)
-      if espObjects[player] then
-         if espObjects[player].highlight then espObjects[player].highlight:Destroy() end
-         if espObjects[player].billboard then espObjects[player].billboard:Destroy() end
-         espObjects[player] = nil
+local HealthBar = VisualsTab:CreateToggle({
+   Name = "Health Bar",
+   CurrentValue = false,
+   Flag = "HealthBar",
+   Callback = function(Value)
+      getgenv().HealthBar = Value
+   end
+})
+
+-- ======== PLAYER TAB ========
+local PlayerSection = PlayerTab:CreateSection("Movement")
+local SpeedSlider = PlayerTab:CreateSlider({
+   Name = "Walk Speed",
+   Range = {16, 100},
+   Increment = 1,
+   Suffix = " speed",
+   CurrentValue = 16,
+   Flag = "Speed",
+   Callback = function(Value)
+      getgenv().SpeedValue = Value
+      game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = Value
+   end
+})
+
+local JumpSlider = PlayerTab:CreateSlider({
+   Name = "Jump Power",
+   Range = {50, 200},
+   Increment = 1,
+   Suffix = " power",
+   CurrentValue = 50,
+   Flag = "JumpPower",
+   Callback = function(Value)
+      getgenv().JumpPower = Value
+      game.Players.LocalPlayer.Character.Humanoid.JumpPower = Value
+   end
+})
+
+local FlyToggle = PlayerTab:CreateToggle({
+   Name = "Fly",
+   CurrentValue = false,
+   Flag = "Fly",
+   Callback = function(Value)
+      getgenv().FlyEnabled = Value
+      if Value then
+         local char = game.Players.LocalPlayer.Character
+         if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.PlatformStand = true
+         end
+         spawn(function()
+            local bodyVelocity = Instance.new("BodyVelocity")
+            bodyVelocity.MaxForce = Vector3.new(1, 1, 1) * 1e9
+            bodyVelocity.P = 1e5
+            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            bodyVelocity.Parent = game.Players.LocalPlayer.Character.HumanoidRootPart
+            local speed = 50
+            while getgenv().FlyEnabled do
+               local moveVector = Vector3.new(0, 0, 0)
+               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.W) then moveVector = moveVector + Vector3.new(0, 0, -speed) end
+               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.S) then moveVector = moveVector + Vector3.new(0, 0, speed) end
+               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.A) then moveVector = moveVector + Vector3.new(-speed, 0, 0) end
+               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.D) then moveVector = moveVector + Vector3.new(speed, 0, 0) end
+               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.Space) then moveVector = moveVector + Vector3.new(0, speed, 0) end
+               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.LeftShift) then moveVector = moveVector + Vector3.new(0, -speed, 0) end
+               if bodyVelocity and bodyVelocity.Parent then
+                  bodyVelocity.Velocity = workspace.CurrentCamera.CFrame:VectorToWorldSpace(moveVector)
+               end
+               wait()
+            end
+            if bodyVelocity then bodyVelocity:Destroy() end
+            if char and char:FindFirstChild("Humanoid") then
+               char.Humanoid.PlatformStand = false
+            end
+         end)
+      else
+         -- Stop fly
+         local char = game.Players.LocalPlayer.Character
+         if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.PlatformStand = false
+         end
       end
-   end)
-end
+   end
+})
 
--- Запуск цикла обновления 20 раз в секунду через Heartbeat
-local function startUpdateLoop()
-   if updateRunning then return end
-   updateRunning = true
-
-   local lastUpdate = tick()
-   local interval = 0.05  -- 20 раз в секунду
-
-   updateConnection = game:GetService("RunService").Heartbeat:Connect(function(delta)
-      if not espEnabled then
-         -- Если ESP выключен, можно не обновлять, но цикл продолжает работать
-         return
-      end
-      local now = tick()
-      if now - lastUpdate >= interval then
-         lastUpdate = now
-         -- Обновляем всех игроков
-         for _, player in pairs(game.Players:GetPlayers()) do
-            if player ~= game.Players.LocalPlayer and player.Character then
-               updateESPForPlayer(player)
+-- ======== MISC TAB ========
+local MiscSection = MiscTab:CreateSection("Utility")
+local TeleportButton = MiscTab:CreateButton({
+   Name = "Teleport to Enemy",
+   Callback = function()
+      local Players = game:GetService("Players")
+      local LocalPlayer = Players.LocalPlayer
+      local closest = nil
+      local dist = math.huge
+      for _, v in pairs(Players:GetPlayers()) do
+         if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+            local root = v.Character.HumanoidRootPart
+            local mag = (root.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+            if mag < dist then
+               dist = mag
+               closest = v
             end
          end
       end
-   end)
-end
-
--- Остановка цикла (опционально)
-local function stopUpdateLoop()
-   if updateConnection then
-      updateConnection:Disconnect()
-      updateConnection = nil
-   end
-   updateRunning = false
-end
-
--- Вкл/Выкл ESP
-local function toggleESP(state)
-   espEnabled = state
-   if espEnabled then
-      refreshAllESP()
-      setupConnections()
-      if not updateRunning then
-         startUpdateLoop()
+      if closest and closest.Character and closest.Character:FindFirstChild("HumanoidRootPart") then
+         LocalPlayer.Character.HumanoidRootPart.CFrame = closest.Character.HumanoidRootPart.CFrame * CFrame.new(0, 3, 5)
       end
-   else
-      clearESP()
-      for _, conn in pairs(espConnections) do conn:Disconnect() end
-      espConnections = {}
-      -- Остановка цикла не требуется, он продолжит работать, но проверяет espEnabled
-      -- Можно оставить цикл всегда работающим, но он будет простаивать
-   end
-end
-
--- Вкл/Выкл имён
-local function toggleNames(state)
-   showNames = state
-   if espEnabled then refreshAllESP() end
-end
-
--- Отключение тумана
-local function toggleFog(state)
-   fogOff = state
-   local lighting = game:GetService("Lighting")
-   if fogOff then
-      lighting.FogEnd = 999999
-      lighting.FogStart = 0
-   else
-      lighting.FogEnd = 1000
-      lighting.FogStart = 0
-   end
-end
-
--- Получить актуальный список команд (для дропдаунов)
-local function getTeamNames()
-   local names = {}
-   for _, team in pairs(game:GetService("Teams"):GetTeams()) do
-      table.insert(names, team.Name)
-   end
-   if #names == 0 then
-      table.insert(names, "Нет команд")
-   end
-   return names
-end
-
--- ===== UI =====
-local MainSection = Tab:CreateSection("Основные настройки")
-
-Tab:CreateToggle({
-   Name = "Включить ESP",
-   CurrentValue = false,
-   Callback = toggleESP
-})
-
-Tab:CreateToggle({
-   Name = "Показывать имена и здоровье",
-   CurrentValue = false,
-   Callback = toggleNames
-})
-
-Tab:CreateToggle({
-   Name = "Отключить туман",
-   CurrentValue = false,
-   Callback = toggleFog
-})
-
-local TeamSection = Tab:CreateSection("Выбор команд (можно выбрать несколько)")
-
--- Храним ссылки на дропдауны для обновления списка
-local dropdowns = {}
-local initialOptions = getTeamNames()
-
-local enemyDropdown = Tab:CreateDropdown({
-   Name = "Команды-враги",
-   Options = initialOptions,
-   Multiple = true,          -- разрешаем выбор нескольких
-   CurrentValue = {},        -- изначально пусто
-   Callback = function(val)
-      enemyTeams = val or {}
-      if espEnabled then refreshAllESP() end
    end
 })
-dropdowns.enemy = enemyDropdown
 
-local allyDropdown = Tab:CreateDropdown({
-   Name = "Команды-союзники",
-   Options = initialOptions,
-   Multiple = true,
-   CurrentValue = {},
-   Callback = function(val)
-      allyTeams = val or {}
-      if espEnabled then refreshAllESP() end
-   end
-})
-dropdowns.ally = allyDropdown
-
--- Кнопка для обновления списка команд (если появились новые)
-Tab:CreateButton({
-   Name = "Обновить список команд",
+local RejoinButton = MiscTab:CreateButton({
+   Name = "Rejoin",
    Callback = function()
-      local newOptions = getTeamNames()
-      pcall(function()
-         dropdowns.enemy:SetOptions(newOptions)
-      end)
-      pcall(function()
-         dropdowns.ally:SetOptions(newOptions)
-      end)
+      game:GetService("TeleportService"):Teleport(game.PlaceId, game.Players.LocalPlayer)
    end
 })
 
-local ColorSection = Tab:CreateSection("Цвета ESP")
-
-Tab:CreateColorPicker({
-   Name = "Цвет врагов",
-   Color = enemyColor,
-   Callback = function(color)
-      enemyColor = color
-      if espEnabled then refreshAllESP() end
+local InfiniteYield = MiscTab:CreateToggle({
+   Name = "Infinite Yield (Admin)",
+   CurrentValue = false,
+   Flag = "InfiniteYield",
+   Callback = function(Value)
+      if Value then
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+      end
    end
 })
 
-Tab:CreateColorPicker({
-   Name = "Цвет союзников",
-   Color = allyColor,
-   Callback = function(color)
-      allyColor = color
-      if espEnabled then refreshAllESP() end
-   end
-})
-
-Tab:CreateButton({
-   Name = "Обновить ESP сейчас (принудительно)",
-   Callback = function()
-      if espEnabled then refreshAllESP() end
-   end
-})
-
--- Загрузка сохранённой конфигурации
+-- Load saved configuration
 Rayfield:LoadConfiguration()
-
--- Запуск цикла обновления сразу (он будет ждать включения ESP)
-startUpdateLoop()
-
-print("ESP Hub загружен! Ключ: 123")
