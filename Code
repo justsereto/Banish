@@ -1,345 +1,424 @@
 --[[
-    Delta Exploit - ESP + No Fog Script (Mobile)
-    Активация по кнопке на экране
+    Delta Exploit - ESP + No Fog Script
+    UI Library: Rayfield
+    Supports: Mobile (Phone)
 ]]
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lightning")
-local Camera = workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
+-- Load Rayfield Library
+local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source"))()
 
--- НАСТРОЙКИ
-local ESPEnabled = false  -- По умолчанию выключено
-local ESPTeamCheck = true
-local BoxColor = Color3.fromRGB(0, 255, 0)
-local TextColor = Color3.fromRGB(255, 255, 255)
-local FogDisabled = false
-
--- Хранилище объектов ESP
-local ESPObjects = {}
-local ESPFolder = Instance.new("Folder")
-ESPFolder.Name = "ESP_Folder"
-ESPFolder.Parent = game.CoreGui
-
--- СОЗДАНИЕ КНОПКИ НА ЭКРАНЕ
-local function CreateToggleButton()
-    -- Главный контейнер кнопки
-    local ButtonContainer = Instance.new("ScreenGui")
-    ButtonContainer.Name = "ESP_Button"
-    ButtonContainer.Parent = game.CoreGui
-    ButtonContainer.IgnoreGuiInset = true
-    
-    -- Основная кнопка
-    local Button = Instance.new("ImageButton")
-    Button.Name = "ToggleButton"
-    Button.Parent = ButtonContainer
-    Button.Size = UDim2.new(0, 70, 0, 70)
-    Button.Position = UDim2.new(0, 20, 0, 100)  -- Левый верхний угол
-    Button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    Button.BackgroundTransparency = 0.3
-    Button.BorderSizePixel = 0
-    Button.Image = "rbxassetid://6023420947"  -- Иконка глаза
-    Button.ImageColor3 = Color3.fromRGB(200, 200, 200)
-    Button.ImageTransparency = 0.2
-    Button.ZIndex = 999
-    
-    -- Эффекты при наведении
-    local UIStroke = Instance.new("UIStroke")
-    UIStroke.Parent = Button
-    UIStroke.Color = Color3.fromRGB(0, 255, 0)
-    UIStroke.Thickness = 2
-    UIStroke.Transparency = 0.5
-    
-    local UICorner = Instance.new("UICorner")
-    UICorner.Parent = Button
-    UICorner.CornerRadius = UDim.new(1, 0)  -- Круглая кнопка
-    
-    -- Текст статуса
-    local StatusLabel = Instance.new("TextLabel")
-    StatusLabel.Name = "Status"
-    StatusLabel.Parent = Button
-    StatusLabel.Size = UDim2.new(1, 0, 0.4, 0)
-    StatusLabel.Position = UDim2.new(0, 0, 0.6, 0)
-    StatusLabel.BackgroundTransparency = 1
-    StatusLabel.Text = "OFF"
-    StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-    StatusLabel.TextScaled = true
-    StatusLabel.Font = Enum.Font.GothamBold
-    StatusLabel.ZIndex = 1000
-    
-    -- Кнопка для перетаскивания (увеличенная зона)
-    local DragArea = Instance.new("TextButton")
-    DragArea.Name = "DragArea"
-    DragArea.Parent = ButtonContainer
-    DragArea.Size = UDim2.new(0, 100, 0, 100)
-    DragArea.Position = Button.Position - UDim2.new(0, 15, 0, 15)
-    DragArea.BackgroundTransparency = 1
-    DragArea.Text = ""
-    DragArea.ZIndex = 998
-    
-    -- Переменные для перетаскивания
-    local dragging = false
-    local dragStart
-    local startPos
-    
-    DragArea.MouseButton1Down:Connect(function(x, y)
-        dragging = true
-        dragStart = Vector2.new(x, y)
-        startPos = Button.Position
-        DragArea.ZIndex = 1001
-    end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = Vector2.new(input.Position.X, input.Position.Y) - dragStart
-            Button.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
-            DragArea.Position = Button.Position - UDim2.new(0, 15, 0, 15)
-        end
-    end)
-    
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-            DragArea.ZIndex = 998
-        end
-    end)
-    
-    -- Функция обновления статуса кнопки
-    local function UpdateButtonStatus()
-        if ESPEnabled then
-            StatusLabel.Text = "ON"
-            StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-            UIStroke.Color = Color3.fromRGB(0, 255, 0)
-            Button.ImageColor3 = Color3.fromRGB(255, 255, 255)
-            
-            -- Анимация включения
-            TweenService:Create(Button, TweenInfo.new(0.3), {
-                BackgroundTransparency = 0.1
-            }):Play()
-        else
-            StatusLabel.Text = "OFF"
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-            UIStroke.Color = Color3.fromRGB(255, 0, 0)
-            Button.ImageColor3 = Color3.fromRGB(200, 200, 200)
-            
-            TweenService:Create(Button, TweenInfo.new(0.3), {
-                BackgroundTransparency = 0.3
-            }):Play()
-        end
-    end
-    
-    -- Нажатие на кнопку
-    Button.MouseButton1Click:Connect(function()
-        ESPEnabled = not ESPEnabled
-        
-        if ESPEnabled then
-            -- Включаем ESP и туман
-            if not FogDisabled then
-                DisableFog()
-                FogDisabled = true
-            end
-            print("[Delta] ESP Включен!")
-        else
-            -- Выключаем ESP
-            for player, _ in pairs(ESPObjects) do
-                RemoveESP(player)
-            end
-            print("[Delta] ESP Выключен!")
-        end
-        
-        UpdateButtonStatus()
-    end)
-    
-    -- Двойной тап для сброса позиции
-    local lastTap = 0
-    Button.MouseButton1Down:Connect(function()
-        if tick() - lastTap < 0.3 then
-            -- Сброс позиции
-            Button.Position = UDim2.new(0, 20, 0, 100)
-            DragArea.Position = Button.Position - UDim2.new(0, 15, 0, 15)
-        end
-        lastTap = tick()
-    end)
-    
-    -- Обновляем начальный статус
-    UpdateButtonStatus()
-    
-    return ButtonContainer
-end
-
--- ОТКЛЮЧЕНИЕ ТУМАНА
-local function DisableFog()
-    Lighting.FogEnd = 999999
-    Lighting.FogStart = 0
-    Lighting.FogColor = Color3.fromRGB(0, 0, 0)
-    if Lighting:FindFirstChild("Atmosphere") then
-        Lighting.Atmosphere:Destroy()
-    end
-    print("[Delta] Туман отключён!")
-end
-
--- ФУНКЦИИ ESP (без изменений)
-local function CreateESP(player)
-    if player == LocalPlayer then return end
-    if ESPObjects[player] then return end
-    
-    local esp = {
-        Box = Instance.new("BoxHandleAdornment"),
-        Name = Instance.new("BillboardGui"),
-        NameLabel = Instance.new("TextLabel"),
-        Distance = Instance.new("BillboardGui"),
-        DistLabel = Instance.new("TextLabel")
+-- Create Window
+local Window = Rayfield:CreateWindow({
+    Name = "Delta ESP + No Fog",
+    Icon = 0,
+    LoadingTitle = "Loading Script...",
+    LoadingSubtitle = "by YourName",
+    Theme = "Default",
+    DisableRayfieldPrompts = false,
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "DeltaESP",
+        FileName = "Settings"
     }
-    
-    esp.Box.Size = Vector3.new(3, 5, 1)
-    esp.Box.Adornee = player.Character and player.Character:FindFirstChild("HumanoidRootPart") or nil
-    esp.Box.AlwaysOnTop = true
-    esp.Box.ZIndex = 10
-    esp.Box.Color3 = BoxColor
-    esp.Box.Transparency = 0.3
-    esp.Box.Parent = ESPFolder
-    
-    esp.Name.Size = UDim2.new(0, 150, 0, 30)
-    esp.Name.AlwaysOnTop = true
-    esp.Name.Adornee = player.Character and player.Character:FindFirstChild("Head") or nil
-    esp.Name.Parent = ESPFolder
-    
-    esp.NameLabel.Size = UDim2.new(1, 0, 1, 0)
-    esp.NameLabel.BackgroundTransparency = 1
-    esp.NameLabel.TextColor3 = TextColor
-    esp.NameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    esp.NameLabel.TextStrokeTransparency = 0.3
-    esp.NameLabel.TextScaled = true
-    esp.NameLabel.Font = Enum.Font.GothamBold
-    esp.NameLabel.Text = player.Name
-    esp.NameLabel.Parent = esp.Name
-    
-    esp.Distance.Size = UDim2.new(0, 100, 0, 25)
-    esp.Distance.AlwaysOnTop = true
-    esp.Distance.Adornee = player.Character and player.Character:FindFirstChild("Head") or nil
-    esp.Distance.Parent = ESPFolder
-    esp.Distance.StudsOffset = Vector3.new(0, -2, 0)
-    
-    esp.DistLabel.Size = UDim2.new(1, 0, 1, 0)
-    esp.DistLabel.BackgroundTransparency = 1
-    esp.DistLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    esp.DistLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    esp.DistLabel.TextStrokeTransparency = 0.3
-    esp.DistLabel.TextScaled = true
-    esp.DistLabel.Font = Enum.Font.Gotham
-    esp.DistLabel.Text = "0m"
-    esp.DistLabel.Parent = esp.Distance
-    
-    ESPObjects[player] = esp
-end
+})
 
-local function RemoveESP(player)
-    if ESPObjects[player] then
-        for _, obj in pairs(ESPObjects[player]) do
-            if obj and obj.Parent then
-                obj:Destroy()
-            end
-        end
-        ESPObjects[player] = nil
+-- Create Tabs
+local MainTab = Window:CreateTab("Main", 448336245)
+local SettingsTab = Window:CreateTab("Settings", 448336245)
+
+-- Variables
+local ESPEnabled = false
+local TeamCheck = false
+local BoxESP = false
+local TracerESP = false
+local NameESP = false
+local HealthBar = false
+local DistanceESP = false
+
+local ESPObjects = {}
+local NoFogEnabled = false
+
+-- No Fog Function
+local function ToggleNoFog(state)
+    NoFogEnabled = state
+    if state then
+        game:GetService("Lighting").FogEnd = 999999
+        game:GetService("Lighting").FogStart = 0
+        game:GetService("Lighting").Fog = false
+        game:GetService("Lighting").FogMode = Enum.FogMode.None
+    else
+        game:GetService("Lighting").FogEnd = 1000
+        game:GetService("Lighting").FogStart = 0
+        game:GetService("Lighting").Fog = true
+        game:GetService("Lighting").FogMode = Enum.FogMode.Linear
     end
 end
 
-local function UpdateESP()
-    if not ESPEnabled then return end
+-- ESP Drawing Functions
+local function CreateESP(player)
+    if not player or not player.Character or not player.Character:FindFirstChild("Humanoid") then return end
     
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if ESPTeamCheck and player.Team == LocalPlayer.Team then
-                RemoveESP(player)
-                continue
+    local character = player.Character
+    local humanoid = character:FindFirstChild("Humanoid")
+    local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso")
+    
+    if not rootPart then return end
+    
+    -- Create ESP Parts
+    local espFolder = Instance.new("Folder")
+    espFolder.Name = "ESP_" .. player.Name
+    espFolder.Parent = character
+    
+    -- Box ESP
+    local box = Instance.new("BoxHandleAdornment")
+    box.Name = "Box"
+    box.Size = Vector3.new(3, 5, 1)
+    box.Adornee = rootPart
+    box.ZIndex = 0
+    box.AlwaysOnTop = true
+    box.Transparency = 0.5
+    box.Color3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 1, 1)
+    box.Parent = espFolder
+    
+    -- Tracer
+    local tracer = Instance.new("LineHandleAdornment")
+    tracer.Name = "Tracer"
+    tracer.Thickness = 1
+    tracer.ZIndex = 0
+    tracer.AlwaysOnTop = true
+    tracer.Color3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 1, 1)
+    tracer.Parent = espFolder
+    
+    -- Name Label (BillboardGui)
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "NameLabel"
+    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.Adornee = rootPart
+    billboard.AlwaysOnTop = true
+    billboard.Parent = espFolder
+    
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "Text"
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextScaled = true
+    nameLabel.TextColor3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 1, 1)
+    nameLabel.TextStrokeTransparency = 0.5
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.Parent = billboard
+    
+    -- Health Bar
+    local healthBillboard = Instance.new("BillboardGui")
+    healthBillboard.Name = "HealthBar"
+    healthBillboard.Size = UDim2.new(0, 100, 0, 10)
+    healthBillboard.Adornee = rootPart
+    healthBillboard.AlwaysOnTop = true
+    healthBillboard.Parent = espFolder
+    
+    local healthBar = Instance.new("Frame")
+    healthBar.Name = "Bar"
+    healthBar.Size = UDim2.new(1, 0, 1, 0)
+    healthBar.BackgroundColor3 = Color3.new(0, 1, 0)
+    healthBar.BorderSizePixel = 0
+    healthBar.Parent = healthBillboard
+    
+    local healthBg = Instance.new("Frame")
+    healthBg.Name = "Background"
+    healthBg.Size = UDim2.new(1, 0, 1, 0)
+    healthBg.BackgroundColor3 = Color3.new(0.3, 0.3, 0.3)
+    healthBg.BorderSizePixel = 0
+    healthBg.Parent = healthBillboard
+    
+    -- Store ESP objects
+    table.insert(ESPObjects, {
+        Player = player,
+        Folder = espFolder,
+        Box = box,
+        Tracer = tracer,
+        Billboard = billboard,
+        NameLabel = nameLabel,
+        HealthBillboard = healthBillboard,
+        HealthBar = healthBar,
+        HealthBg = healthBg
+    })
+    
+    -- Update loop
+    spawn(function()
+        while ESPEnabled and player and player.Character and humanoid and humanoid.Health > 0 do
+            local root = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Torso")
+            if not root then break end
+            
+            -- Update Tracer
+            local camera = game.Workspace.CurrentCamera
+            local vector, onScreen = camera:WorldToViewportPoint(root.Position)
+            
+            if ESPEnabled then
+                -- Update Tracer position
+                local tracerLine = tracer
+                if tracerLine then
+                    tracerLine.From = root.Position
+                    tracerLine.To = camera.CFrame.Position
+                end
+                
+                -- Update Health
+                if HealthBar and humanoid then
+                    local healthPercent = humanoid.Health / humanoid.MaxHealth
+                    healthBar.Size = UDim2.new(healthPercent, 0, 1, 0)
+                    
+                    -- Color based on health
+                    if healthPercent > 0.5 then
+                        healthBar.BackgroundColor3 = Color3.new(0, 1, 0)
+                    elseif healthPercent > 0.25 then
+                        healthBar.BackgroundColor3 = Color3.new(1, 1, 0)
+                    else
+                        healthBar.BackgroundColor3 = Color3.new(1, 0, 0)
+                    end
+                end
+                
+                -- Update Name with Distance
+                if DistanceESP and onScreen then
+                    local distance = math.floor((root.Position - camera.CFrame.Position).Magnitude)
+                    nameLabel.Text = player.Name .. " [" .. distance .. "m]"
+                elseif NameESP then
+                    nameLabel.Text = player.Name
+                end
+                
+                -- Team Check
+                if TeamCheck and game.Players.LocalPlayer and game.Players.LocalPlayer.Team == player.Team then
+                    box.Color3 = Color3.new(0, 1, 0)
+                    tracer.Color3 = Color3.new(0, 1, 0)
+                    nameLabel.TextColor3 = Color3.new(0, 1, 0)
+                else
+                    box.Color3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 0, 0)
+                    tracer.Color3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 0, 0)
+                    nameLabel.TextColor3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 0, 0)
+                end
             end
             
-            if not ESPObjects[player] then
+            task.wait(0.1)
+        end
+        
+        -- Cleanup if player dies or ESP disabled
+        if ESPObjects then
+            for i, obj in pairs(ESPObjects) do
+                if obj.Player == player then
+                    if obj.Folder then obj.Folder:Destroy() end
+                    table.remove(ESPObjects, i)
+                    break
+                end
+            end
+        end
+    end)
+end
+
+-- Remove ESP for specific player
+local function RemoveESP(player)
+    for i, obj in pairs(ESPObjects) do
+        if obj.Player == player then
+            if obj.Folder then obj.Folder:Destroy() end
+            table.remove(ESPObjects, i)
+            break
+        end
+    end
+end
+
+-- Toggle ESP
+local function ToggleESP(state)
+    ESPEnabled = state
+    
+    if state then
+        -- ESP for all players
+        for _, player in pairs(game.Players:GetPlayers()) do
+            if player ~= game.Players.LocalPlayer then
                 CreateESP(player)
             end
-            
-            local esp = ESPObjects[player]
-            if esp and esp.Box then
-                esp.Box.Adornee = player.Character.HumanoidRootPart
-                esp.Box.CFrame = player.Character.HumanoidRootPart.CFrame
-                
-                local humanoid = player.Character:FindFirstChild("Humanoid")
-                if humanoid then
-                    local healthPercent = humanoid.Health / humanoid.MaxHealth
-                    esp.Box.Color3 = Color3.fromRGB(
-                        255 * (1 - healthPercent),
-                        255 * healthPercent,
-                        0
-                    )
-                end
-            end
-            
-            if esp and esp.Name then
-                esp.Name.Adornee = player.Character:FindFirstChild("Head") or player.Character.HumanoidRootPart
-            end
-            if esp and esp.Distance then
-                esp.Distance.Adornee = player.Character:FindFirstChild("Head") or player.Character.HumanoidRootPart
-                local dist = (player.Character.HumanoidRootPart.Position - (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position or Vector3.new(0,0,0))).Magnitude
-                esp.DistLabel.Text = math.floor(dist) .. "m"
-            end
-        else
-            RemoveESP(player)
         end
-    end
-end
-
-Players.PlayerRemoving:Connect(function(player)
-    RemoveESP(player)
-end)
-
--- ОСНОВНОЙ ЦИКЛ
-RunService.RenderStepped:Connect(function()
-    UpdateESP()
-end)
-
--- КОМАНДЫ ЧЕРЕЗ ЧАТ
-local function SetupCommands()
-    local ChatService = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
-    if ChatService then
-        ChatService.OnMessageDoneFiltering.OnClientEvent:Connect(function(messageData)
-            if messageData.FromSpeaker == LocalPlayer.Name then
-                local msg = messageData.Message:lower()
-                if msg == "!esp on" then
-                    ESPEnabled = true
-                    if not FogDisabled then
-                        DisableFog()
-                        FogDisabled = true
-                    end
-                    print("[Delta] ESP Включен через команду!")
-                elseif msg == "!esp off" then
-                    ESPEnabled = false
-                    for player, _ in pairs(ESPObjects) do
-                        RemoveESP(player)
-                    end
-                    print("[Delta] ESP Выключен через команду!")
-                elseif msg == "!fog off" then
-                    DisableFog()
-                    FogDisabled = true
-                elseif msg == "!team" then
-                    ESPTeamCheck = not ESPTeamCheck
-                    print("[Delta] Проверка команды: " .. tostring(ESPTeamCheck))
-                end
+        
+        -- Connect for new players
+        game.Players.PlayerAdded:Connect(function(player)
+            if ESPEnabled and player ~= game.Players.LocalPlayer then
+                CreateESP(player)
             end
         end)
+        
+        -- Remove when player leaves
+        game.Players.PlayerRemoving:Connect(function(player)
+            RemoveESP(player)
+        end)
+    else
+        -- Remove all ESP
+        for _, obj in pairs(ESPObjects) do
+            if obj.Folder then obj.Folder:Destroy() end
+        end
+        ESPObjects = {}
     end
 end
 
--- ЗАПУСК
-CreateToggleButton()
-SetupCommands()
-print("[Delta] ESP + Кнопка загружены!")
-print("Нажмите на кнопку в левом верхнем углу для включения ESP")
-print("Команды в чате: !esp on, !esp off, !fog off, !team")
+-- Commands Function
+local function ExecuteCommand(command)
+    local cmd = string.lower(command)
+    
+    if cmd == "esp on" then
+        ToggleESP(true)
+        Rayfield:Notify({Title = "ESP", Content = "ESP Enabled!", Duration = 2})
+    elseif cmd == "esp off" then
+        ToggleESP(false)
+        Rayfield:Notify({Title = "ESP", Content = "ESP Disabled!", Duration = 2})
+    elseif cmd == "nofog on" then
+        ToggleNoFog(true)
+        Rayfield:Notify({Title = "No Fog", Content = "No Fog Enabled!", Duration = 2})
+    elseif cmd == "nofog off" then
+        ToggleNoFog(false)
+        Rayfield:Notify({Title = "No Fog", Content = "No Fog Disabled!", Duration = 2})
+    elseif cmd == "help" then
+        Rayfield:Notify({Title = "Commands", Content = "esp on/off, nofog on/off, help", Duration = 5})
+    else
+        Rayfield:Notify({Title = "Error", Content = "Unknown command! Type 'help'", Duration = 3})
+    end
+end
+
+--[[ UI Elements ]]
+
+-- Toggles
+MainTab:CreateToggle({
+    Name = "Enable ESP",
+    CurrentValue = false,
+    Flag = "ESPEnabled",
+    Callback = function(Value)
+        ToggleESP(Value)
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Team Check",
+    CurrentValue = false,
+    Flag = "TeamCheck",
+    Callback = function(Value)
+        TeamCheck = Value
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Box ESP",
+    CurrentValue = false,
+    Flag = "BoxESP",
+    Callback = function(Value)
+        BoxESP = Value
+        -- Refresh ESP
+        if ESPEnabled then
+            ToggleESP(false)
+            task.wait(0.1)
+            ToggleESP(true)
+        end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Tracer ESP",
+    CurrentValue = false,
+    Flag = "TracerESP",
+    Callback = function(Value)
+        TracerESP = Value
+        if ESPEnabled then
+            ToggleESP(false)
+            task.wait(0.1)
+            ToggleESP(true)
+        end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Name ESP",
+    CurrentValue = false,
+    Flag = "NameESP",
+    Callback = function(Value)
+        NameESP = Value
+        if ESPEnabled then
+            ToggleESP(false)
+            task.wait(0.1)
+            ToggleESP(true)
+        end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Health Bar",
+    CurrentValue = false,
+    Flag = "HealthBar",
+    Callback = function(Value)
+        HealthBar = Value
+        if ESPEnabled then
+            ToggleESP(false)
+            task.wait(0.1)
+            ToggleESP(true)
+        end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Distance",
+    CurrentValue = false,
+    Flag = "Distance",
+    Callback = function(Value)
+        DistanceESP = Value
+        if ESPEnabled then
+            ToggleESP(false)
+            task.wait(0.1)
+            ToggleESP(true)
+        end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "No Fog",
+    CurrentValue = false,
+    Flag = "NoFog",
+    Callback = function(Value)
+        ToggleNoFog(Value)
+    end
+})
+
+-- Command Input
+SettingsTab:CreateInput({
+    Name = "Command Input",
+    PlaceholderText = "Type command...",
+    RemoveTextAfterFocusLost = true,
+    Callback = function(Text)
+        ExecuteCommand(Text)
+    end
+})
+
+-- Buttons
+SettingsTab:CreateButton({
+    Name = "Refresh ESP",
+    Callback = function()
+        if ESPEnabled then
+            ToggleESP(false)
+            task.wait(0.1)
+            ToggleESP(true)
+            Rayfield:Notify({Title = "ESP", Content = "ESP Refreshed!", Duration = 2})
+        end
+    end
+})
+
+SettingsTab:CreateButton({
+    Name = "Toggle All ESP",
+    Callback = function()
+        ToggleESP(not ESPEnabled)
+        Rayfield:Notify({Title = "ESP", Content = ESPEnabled and "ESP Enabled!" or "ESP Disabled!", Duration = 2})
+    end
+})
+
+SettingsTab:CreateButton({
+    Name = "Destroy UI",
+    Callback = function()
+        Rayfield:Destroy()
+    end
+})
+
+-- Notify on load
+Rayfield:Notify({Title = "Script Loaded", Content = "ESP + No Fog Ready!", Duration = 3})
+Rayfield:Notify({Title = "Tip", Content = "Type 'help' in commands", Duration = 3})
+
+-- Auto-execute no fog by default (optional)
+-- ToggleNoFog(true)
