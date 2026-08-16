@@ -1,6 +1,6 @@
 debugX = true
 
--- Загрузка Rayfield с ключом 123
+-- Загрузка Rayfield
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
    Name = "ESP & Fog Control",
@@ -34,31 +34,48 @@ local Window = Rayfield:CreateWindow({
 
 local Tab = Window:CreateTab("ESP", 4483362458)
 
--- Переменные состояний
+-- Состояния
 local espEnabled = false
 local showNames = false
 local fogOff = false
 
--- Цвета по умолчанию
-local enemyColor = Color3.fromRGB(255, 0, 0)   -- красный
-local allyColor = Color3.fromRGB(0, 255, 0)     -- зелёный
+-- Списки команд
+local enemyTeams = {}   -- названия команд-врагов
+local allyTeams = {}    -- названия команд-союзников
 
--- Хранилище ESP объектов
+-- Цвета
+local enemyColor = Color3.fromRGB(255, 0, 0)
+local allyColor = Color3.fromRGB(0, 255, 0)
+
+-- Хранилище ESP
 local espObjects = {}
 local espConnections = {}
 
--- Функция определения враг/союзник
-local function isEnemy(player)
-   local localPlayer = game.Players.LocalPlayer
-   if player == localPlayer then return false end
-   local localTeam = localPlayer.Team
-   local playerTeam = player.Team
-   -- Если у кого-то нет команды, считаем врагом (можно настроить)
-   if not localTeam or not playerTeam then return true end
-   return localTeam ~= playerTeam
+-- Вспомогательная функция поиска в таблице
+local function tableFind(tbl, value)
+   for _, v in pairs(tbl) do
+      if v == value then return true end
+   end
+   return false
 end
 
--- Очистка ESP для всех
+-- Определение враг/союзник
+local function isEnemy(player)
+   local team = player.Team
+   local teamName = team and team.Name or nil
+
+   if teamName then
+      if tableFind(enemyTeams, teamName) then
+         return true
+      elseif tableFind(allyTeams, teamName) then
+         return false
+      end
+   end
+   -- Если команда не указана ни в одном списке, считаем врагом
+   return true
+end
+
+-- Очистка ESP
 local function clearESP()
    for _, data in pairs(espObjects) do
       if data.highlight then data.highlight:Destroy() end
@@ -87,7 +104,6 @@ local function updateESPForPlayer(player)
       espObjects[player] = data
    end
 
-   -- Определяем цвет
    local color = isEnemy(player) and enemyColor or allyColor
 
    -- Highlight
@@ -102,11 +118,10 @@ local function updateESPForPlayer(player)
       highlight.Parent = character
       data.highlight = highlight
    else
-      -- Обновляем цвет, если изменился
       data.highlight.FillColor = color
    end
 
-   -- Billboard (имена)
+   -- Billboard
    if showNames then
       if not data.billboard then
          local bill = Instance.new("BillboardGui")
@@ -120,7 +135,7 @@ local function updateESPForPlayer(player)
          label.Size = UDim2.new(1, 0, 1, 0)
          label.BackgroundTransparency = 1
          label.TextScaled = true
-         label.TextColor3 = color  -- цвет текста совпадает с цветом подсветки
+         label.TextColor3 = color
          label.Font = Enum.Font.GothamBold
          label.TextStrokeTransparency = 0.5
          label.Parent = bill
@@ -128,14 +143,11 @@ local function updateESPForPlayer(player)
          data.billboard = bill
          data.label = label
       else
-         -- обновляем цвет текста
          data.label.TextColor3 = color
       end
-      -- Обновляем текст (имя + здоровье)
       local humanoid = character:FindFirstChild("Humanoid")
       local health = humanoid and math.floor(humanoid.Health) or "?"
-      local name = player.Name
-      data.label.Text = name .. "  ❤️" .. health
+      data.label.Text = player.Name .. "  ❤️" .. health
    else
       if data.billboard then
          data.billboard:Destroy()
@@ -145,7 +157,7 @@ local function updateESPForPlayer(player)
    end
 end
 
--- Обновление всех игроков
+-- Обновить всех игроков
 local function refreshAllESP()
    clearESP()
    if espEnabled then
@@ -159,19 +171,17 @@ end
 
 -- Настройка событий
 local function setupConnections()
-   for _, conn in pairs(espConnections) do
-      conn:Disconnect()
-   end
+   for _, conn in pairs(espConnections) do conn:Disconnect() end
    espConnections = {}
 
    espConnections[#espConnections+1] = game.Players.PlayerAdded:Connect(function(player)
       if espEnabled then
-         player.CharacterAdded:Connect(function(char)
-            wait(0.5)
+         player.CharacterAdded:Connect(function()
+            wait(0.3)
             updateESPForPlayer(player)
          end)
          if player.Character then
-            wait(0.5)
+            wait(0.3)
             updateESPForPlayer(player)
          end
       end
@@ -184,14 +194,12 @@ local function setupConnections()
          espObjects[player] = nil
       end
    end)
-
-   -- Также реагируем на смену команды (можно переподключать, но проще обновлять по таймеру)
 end
 
--- Таймер обновления
+-- Цикл обновления 20 раз в секунду
 local function startUpdateLoop()
    spawn(function()
-      while wait(2) do
+      while wait(0.05) do  -- 20 FPS
          if espEnabled then
             for _, player in pairs(game.Players:GetPlayers()) do
                if player ~= game.Players.LocalPlayer and player.Character then
@@ -211,9 +219,7 @@ local function toggleESP(state)
       setupConnections()
    else
       clearESP()
-      for _, conn in pairs(espConnections) do
-         conn:Disconnect()
-      end
+      for _, conn in pairs(espConnections) do conn:Disconnect() end
       espConnections = {}
    end
 end
@@ -221,9 +227,7 @@ end
 -- Вкл/Выкл имён
 local function toggleNames(state)
    showNames = state
-   if espEnabled then
-      refreshAllESP()
-   end
+   if espEnabled then refreshAllESP() end
 end
 
 -- Отключение тумана
@@ -239,34 +243,81 @@ local function toggleFog(state)
    end
 end
 
--- Создаём интерфейс
-local Section = Tab:CreateSection("Основные настройки")
+-- Получить список всех команд
+local function getTeamNames()
+   local names = {}
+   for _, team in pairs(game:GetService("Teams"):GetTeams()) do
+      table.insert(names, team.Name)
+   end
+   return names
+end
+
+-- Обновить опции дропдаунов
+local function refreshTeamDropdowns()
+   local options = getTeamNames()
+   if #options == 0 then options = {"Нет команд"} end
+   enemyDropdown:SetOptions(options)
+   allyDropdown:SetOptions(options)
+   -- Восстанавливаем текущие значения (если они есть)
+   enemyDropdown:SetValue(enemyTeams)
+   allyDropdown:SetValue(allyTeams)
+end
+
+-- Создание элементов UI
+local MainSection = Tab:CreateSection("Основные настройки")
 
 local ToggleESP = Tab:CreateToggle({
    Name = "Включить ESP",
    CurrentValue = false,
-   Callback = function(value)
-      toggleESP(value)
-   end
+   Callback = toggleESP
 })
 
 local ToggleNames = Tab:CreateToggle({
    Name = "Показывать имена и здоровье",
    CurrentValue = false,
-   Callback = function(value)
-      toggleNames(value)
-   end
+   Callback = toggleNames
 })
 
 local ToggleFog = Tab:CreateToggle({
    Name = "Отключить туман",
    CurrentValue = false,
-   Callback = function(value)
-      toggleFog(value)
+   Callback = toggleFog
+})
+
+local TeamSection = Tab:CreateSection("Выбор команд")
+
+-- Dropdown для врагов
+local enemyDropdown = Tab:CreateDropdown({
+   Name = "Команды-враги",
+   Options = {"Нет команд"},
+   Multiple = true,
+   CurrentValue = {},
+   Callback = function(val)
+      enemyTeams = val
+      if espEnabled then refreshAllESP() end
    end
 })
 
--- Настройки цветов
+-- Dropdown для союзников
+local allyDropdown = Tab:CreateDropdown({
+   Name = "Команды-союзники",
+   Options = {"Нет команд"},
+   Multiple = true,
+   CurrentValue = {},
+   Callback = function(val)
+      allyTeams = val
+      if espEnabled then refreshAllESP() end
+   end
+})
+
+-- Кнопка обновления списка команд
+local RefreshTeamsBtn = Tab:CreateButton({
+   Name = "Обновить список команд",
+   Callback = function()
+      refreshTeamDropdowns()
+   end
+})
+
 local ColorSection = Tab:CreateSection("Цвета ESP")
 
 local EnemyColorPicker = Tab:CreateColorPicker({
@@ -287,16 +338,25 @@ local AllyColorPicker = Tab:CreateColorPicker({
    end
 })
 
--- Кнопка принудительного обновления
-local RefreshButton = Tab:CreateButton({
-   Name = "Обновить ESP",
+local RefreshESPBtn = Tab:CreateButton({
+   Name = "Обновить ESP сейчас",
    Callback = function()
       if espEnabled then refreshAllESP() end
    end
 })
 
--- Загрузка конфигурации
+-- Загрузка сохранённой конфигурации
 Rayfield:LoadConfiguration()
+
+-- После загрузки конфигурации обновляем списки команд и применяем настройки
+spawn(function()
+   wait(0.3) -- даём время на загрузку
+   refreshTeamDropdowns()
+   -- Если ESP был включён в сохранении, он уже включится через Callback, но refreshAllESP может не вызваться, поэтому принудительно обновим
+   if espEnabled then
+      refreshAllESP()
+   end
+end)
 
 -- Запуск цикла обновления
 startUpdateLoop()
