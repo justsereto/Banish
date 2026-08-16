@@ -1,81 +1,177 @@
 --[[
-    UI с ESP и удалением тумана для MTA:SA
+    UI с ESP и удалением тумана для MTA:SA (Мобильная версия)
 ]]
 
--- Инициализация
-local gui = guiCreateWindow(0.3, 0.3, 0.4, 0.5, "ESP + Fog Remover", true)
+-- ==================== НАСТРОЙКИ ====================
+local screenW, screenH = guiGetScreenSize()
+local isMobile = true
+
+-- ==================== СОЗДАНИЕ UI ====================
+
+local gui = guiCreateWindow(
+    screenW * 0.05, 
+    screenH * 0.05, 
+    screenW * 0.90, 
+    screenH * 0.85, 
+    "ESP + Fog Remover", 
+    true
+)
 guiWindowSetSizable(gui, false)
+guiSetVisible(gui, false)
 
 -- Вкладки
-local tabPanel = guiCreateTabPanel(0.02, 0.05, 0.96, 0.90, true, gui)
+local tabPanel = guiCreateTabPanel(0.02, 0.07, 0.96, 0.88, true, gui)
 local tabESP = guiCreateTab("ESP", tabPanel)
 local tabSettings = guiCreateTab("Настройки", tabPanel)
 
 -- ==================== ВКЛАДКА ESP ====================
-local chkESP = guiCreateCheckBox(0.05, 0.05, 0.40, 0.06, "Включить ESP", false, true, tabESP)
-local chkBox = guiCreateCheckBox(0.05, 0.15, 0.40, 0.06, "Показывать Box", true, true, tabESP)
-local chkLine = guiCreateCheckBox(0.05, 0.25, 0.40, 0.06, "Показывать Lines", true, true, tabESP)
-local chkName = guiCreateCheckBox(0.05, 0.35, 0.40, 0.06, "Показывать имена", true, true, tabESP)
-local chkHealth = guiCreateCheckBox(0.05, 0.45, 0.40, 0.06, "Показывать здоровье", true, true, tabESP)
 
--- Выбор цвета (исправлено)
-local lblColor = guiCreateLabel(0.05, 0.55, 0.30, 0.05, "Цвет Box:", true, tabESP)
-local colorEdit = guiCreateEdit(0.35, 0.55, 0.30, 0.06, "#00FF00", true, tabESP) -- HEX цвет
+local function createMobileCheckBox(text, x, y, w, h, parent)
+    local cb = guiCreateCheckBox(x, y, w, h, text, false, true, parent)
+    guiSetFont(cb, "default-bold-small")
+    return cb
+end
+
+local chkESP = createMobileCheckBox("Включить ESP", 0.03, 0.03, 0.94, 0.08, tabESP)
+local chkBox = createMobileCheckBox("Показывать Box", 0.03, 0.13, 0.94, 0.08, tabESP)
+local chkLine = createMobileCheckBox("Показывать Lines", 0.03, 0.23, 0.94, 0.08, tabESP)
+local chkName = createMobileCheckBox("Показывать имена", 0.03, 0.33, 0.94, 0.08, tabESP)
+local chkHealth = createMobileCheckBox("Показывать здоровье", 0.03, 0.43, 0.94, 0.08, tabESP)
+
+-- Выбор цвета
+local lblColor = guiCreateLabel(0.03, 0.53, 0.30, 0.06, "Цвет Box:", true, tabESP)
+guiSetFont(lblColor, "default-bold-small")
+local colorEdit = guiCreateEdit(0.35, 0.53, 0.40, 0.08, "#00FF00", true, tabESP)
+guiSetFont(colorEdit, "default-bold-small")
+
+-- Кнопки цвета (ИСПРАВЛЕНО)
+local function createColorBtn(text, x, y, color, parent)
+    local btn = guiCreateButton(x, y, 0.18, 0.08, text, true, parent)
+    guiSetFont(btn, "default-bold-small")
+    -- Правильный формат цвета для MTA
+    guiSetProperty(btn, "NormalTextColour", "FF" .. color)
+    return btn
+end
+
+local btnRed = createColorBtn("Красный", 0.03, 0.62, "FF0000", tabESP)
+local btnGreen = createColorBtn("Зеленый", 0.22, 0.62, "00FF00", tabESP)
+local btnBlue = createColorBtn("Синий", 0.41, 0.62, "0000FF", tabESP)
+local btnYellow = createColorBtn("Желтый", 0.60, 0.62, "FFFF00", tabESP)
+local btnWhite = createColorBtn("Белый", 0.79, 0.62, "FFFFFF", tabESP)
 
 -- Размер
-local lblSize = guiCreateLabel(0.05, 0.65, 0.30, 0.05, "Размер Box:", true, tabESP)
-local sizeSlider = guiCreateScrollBar(0.35, 0.65, 0.40, 0.06, true, true, tabESP)
+local lblSize = guiCreateLabel(0.03, 0.72, 0.40, 0.06, "Размер Box:", true, tabESP)
+guiSetFont(lblSize, "default-bold-small")
+local sizeSlider = guiCreateScrollBar(0.03, 0.80, 0.94, 0.08, true, true, tabESP)
 guiScrollBarSetScrollPosition(sizeSlider, 50)
 
 -- ==================== ВКЛАДКА НАСТРОЙКИ ====================
-local chkFog = guiCreateCheckBox(0.05, 0.05, 0.80, 0.06, "Удалить туман (Fog Remover)", false, true, tabSettings)
 
--- Дальность видимости (исправлено)
-local lblDist = guiCreateLabel(0.05, 0.15, 0.40, 0.05, "Дальность видимости:", true, tabSettings)
-local distSlider = guiCreateScrollBar(0.05, 0.22, 0.80, 0.06, true, true, tabSettings)
+local chkFog = createMobileCheckBox("Удалить туман", 0.03, 0.03, 0.94, 0.08, tabSettings)
+
+-- Дальность
+local lblDist = guiCreateLabel(0.03, 0.13, 0.40, 0.06, "Дальность:", true, tabSettings)
+guiSetFont(lblDist, "default-bold-small")
+local distSlider = guiCreateScrollBar(0.03, 0.21, 0.94, 0.08, true, true, tabSettings)
 guiScrollBarSetScrollPosition(distSlider, 100)
 
--- Кнопка применения
-local btnApply = guiCreateButton(0.30, 0.35, 0.40, 0.08, "Применить настройки", true, tabSettings)
+-- Кнопка применения (ИСПРАВЛЕНО)
+local btnApply = guiCreateButton(0.25, 0.35, 0.50, 0.12, "ПРИМЕНИТЬ", true, tabSettings)
+guiSetFont(btnApply, "default-bold-small")
+guiSetProperty(btnApply, "NormalTextColour", "FF00FF00") -- Правильный формат
 
 -- Статус
-local lblStatus = guiCreateLabel(0.05, 0.50, 0.90, 0.05, "Статус: Ожидание", true, tabSettings)
+local lblStatus = guiCreateLabel(0.03, 0.52, 0.94, 0.08, "Статус: Ожидание", true, tabSettings)
+guiSetFont(lblStatus, "default-bold-small")
 guiLabelSetColor(lblStatus, 255, 255, 0)
 
+-- ==================== ПЛАВАЮЩАЯ КНОПКА ====================
+
+local toggleBtn = guiCreateButton(
+    screenW * 0.85, 
+    screenH * 0.80, 
+    screenW * 0.12, 
+    screenH * 0.07,
+    "🔍 ESP", 
+    false
+)
+guiSetFont(toggleBtn, "default-bold-small")
+guiSetProperty(toggleBtn, "NormalTextColour", "FF00FF00")
+guiSetVisible(toggleBtn, true)
+
+-- Перетаскивание кнопки
+local dragging = false
+local dragOffX, dragOffY = 0, 0
+
+addEventHandler("onClientGUIClick", toggleBtn, function(button, state)
+    if button == "left" and state == "down" then
+        if isMobile then
+            dragging = true
+            local x, y = guiGetPosition(toggleBtn, false)
+            local mx, my = getCursorPosition()
+            dragOffX = mx * screenW - x
+            dragOffY = my * screenH - y
+        end
+    elseif state == "up" and not dragging then
+        -- Открываем меню только если не перетаскивали
+        local visible = guiGetVisible(gui)
+        guiSetVisible(gui, not visible)
+        showCursor(not visible)
+    end
+end, false)
+
+-- Обработчик перетаскивания
+addEventHandler("onClientMouseMove", root, function(_, _, x, y)
+    if dragging then
+        local newX = x - dragOffX
+        local newY = y - dragOffY
+        newX = math.max(0, math.min(screenW - screenW * 0.12, newX))
+        newY = math.max(0, math.min(screenH - screenH * 0.07, newY))
+        guiSetPosition(toggleBtn, newX, newY, false)
+    end
+end)
+
+-- Сброс перетаскивания при отпускании кнопки мыши
+addEventHandler("onClientMouseUp", root, function()
+    dragging = false
+end)
+
 -- ==================== ПЕРЕМЕННЫЕ ====================
+
 local espEnabled = false
 local fogRemoved = false
 local espColor = {r = 0, g = 255, b = 0}
 
--- ==================== ФУНКЦИИ УДАЛЕНИЯ ТУМАНА ====================
+-- ==================== ФУНКЦИИ ====================
 
--- Функция конвертации HEX в RGB
+-- Конвертация HEX в RGB (ИСПРАВЛЕНО)
 local function hexToRgb(hex)
+    if not hex then return 0, 255, 0 end
     hex = hex:gsub("#", "")
     if #hex == 6 then
-        return tonumber("0x"..hex:sub(1,2)), 
-               tonumber("0x"..hex:sub(3,4)), 
-               tonumber("0x"..hex:sub(5,6))
+        local r = tonumber("0x"..hex:sub(1,2)) or 0
+        local g = tonumber("0x"..hex:sub(3,4)) or 255
+        local b = tonumber("0x"..hex:sub(5,6)) or 0
+        return r, g, b
     end
-    return 0, 255, 0 -- По умолчанию зеленый
+    return 0, 255, 0
 end
 
--- Удаление тумана (исправлено)
+-- Удаление тумана
 local function toggleFog(remove)
     if remove then
-        -- MTA способ удаления тумана
-        setWeather(0) -- Ясная погода
-        setFarClipDistance(5000) -- Максимальная дальность
-        setFogDistance(5000, 5000) -- Правильный синтаксис
+        setWeather(0)
+        setFarClipDistance(5000)
+        setFogDistance(5000, 5000)
         fogRemoved = true
-        guiLabelSetText(lblStatus, "Статус: Туман удален ✓")
+        guiLabelSetText(lblStatus, "✅ Туман удален")
         guiLabelSetColor(lblStatus, 0, 255, 0)
     else
-        setWeather(-1) -- Возвращаем стандартную
+        setWeather(-1)
         resetFarClipDistance()
         resetFogDistance()
         fogRemoved = false
-        guiLabelSetText(lblStatus, "Статус: Туман восстановлен")
+        guiLabelSetText(lblStatus, "🔄 Туман восстановлен")
         guiLabelSetColor(lblStatus, 255, 255, 0)
     end
 end
@@ -85,41 +181,83 @@ local function applySettings()
     local fogState = guiCheckBoxGetSelected(chkFog)
     toggleFog(fogState)
     
-    -- Дальность
     local distValue = guiScrollBarGetScrollPosition(distSlider)
     local distance = 100 + (distValue * 50)
     setFogDistance(distance, distance)
     setFarClipDistance(distance)
     
-    -- Цвет из HEX
     local hex = guiGetText(colorEdit)
     espColor.r, espColor.g, espColor.b = hexToRgb(hex)
     
-    -- ESP
     espEnabled = guiCheckBoxGetSelected(chkESP)
     if espEnabled then
-        guiLabelSetText(lblStatus, "Статус: ESP активирован ✓")
+        guiLabelSetText(lblStatus, "✅ ESP активирован")
         guiLabelSetColor(lblStatus, 0, 255, 0)
     else
-        guiLabelSetText(lblStatus, "Статус: ESP отключен")
+        guiLabelSetText(lblStatus, "⛔ ESP отключен")
         guiLabelSetColor(lblStatus, 255, 255, 0)
     end
 end
 
+-- Быстрая смена цвета
+local function setColor(hex)
+    guiSetText(colorEdit, hex)
+    applySettings()
+end
+
+-- Звук клика (ИСПРАВЛЕНО)
+local function playClick()
+    -- Используем существующий звук
+    playSoundFrontEnd(2) -- Звук клика по кнопке
+end
+
 -- ==================== ОБРАБОТЧИКИ ====================
 
--- Кнопка применения
-addEventHandler("onClientGUIClick", btnApply, applySettings, false)
+addEventHandler("onClientGUIClick", btnApply, function()
+    playClick()
+    applySettings()
+end, false)
 
--- Автоприменение при изменении тумана
 addEventHandler("onClientGUIClick", chkFog, function()
+    playClick()
     applySettings()
 end, false)
 
--- Автоприменение при изменении цвета (по Enter)
-addEventHandler("onClientGUIChanged", colorEdit, function()
-    applySettings()
+-- Кнопки цвета
+addEventHandler("onClientGUIClick", btnRed, function()
+    playClick()
+    setColor("#FF0000")
 end, false)
+
+addEventHandler("onClientGUIClick", btnGreen, function()
+    playClick()
+    setColor("#00FF00")
+end, false)
+
+addEventHandler("onClientGUIClick", btnBlue, function()
+    playClick()
+    setColor("#0000FF")
+end, false)
+
+addEventHandler("onClientGUIClick", btnYellow, function()
+    playClick()
+    setColor("#FFFF00")
+end, false)
+
+addEventHandler("onClientGUIClick", btnWhite, function()
+    playClick()
+    setColor("#FFFFFF")
+end, false)
+
+addEventHandler("onClientGUIChanged", colorEdit, applySettings, false)
+
+-- Закрытие по ESC
+addEventHandler("onClientKey", root, function(key, press)
+    if key == "escape" and press and guiGetVisible(gui) then
+        guiSetVisible(gui, false)
+        showCursor(false)
+    end
+end)
 
 -- ==================== ESP РЕНДЕРИНГ ====================
 
@@ -147,13 +285,11 @@ local function renderESP()
             local dist = getDistanceBetweenPoints3D(localX, localY, localZ, x, y, z)
             if dist > 300 then break end
             
-            -- Исправлено: правильный вызов
             local sx, sy, visible = getScreenFromWorldPosition(x, y, z + 0.8)
             if sx and sy and visible then
                 local size = boxSize * (50 / math.max(dist, 1) * 10)
-                size = math.min(size, 200) -- Ограничение
+                size = math.min(size, 200)
                 
-                -- BOX
                 if showBox then
                     dxDrawRectangle(sx - size/2, sy - size, size, size * 2, tocolor(r, g, b, 150))
                     dxDrawRectangle(sx - size/2, sy - size, size, 2, tocolor(r, g, b, 255))
@@ -162,20 +298,19 @@ local function renderESP()
                     dxDrawRectangle(sx + size/2 - 2, sy - size, 2, size * 2, tocolor(r, g, b, 255))
                 end
                 
-                -- LINE
                 if showLine then
-                    local centerX, centerY = guiGetScreenSize()
-                    dxDrawLine(centerX/2, centerY/2, sx, sy, tocolor(r, g, b, 100), 2)
+                    local centerX, centerY = screenW/2, screenH/2
+                    dxDrawLine(centerX, centerY, sx, sy, tocolor(r, g, b, 100), 2)
                 end
                 
-                -- NAME
                 if showName then
-                    local name = getPlayerName(player):gsub("#%x%x%x%x%x%x", "")
+                    local name = getPlayerName(player)
+                    -- Убираем HEX теги из имени (ИСПРАВЛЕНО)
+                    name = name:gsub("#%x%x%x%x%x%x", "")
                     dxDrawText(name, sx - 50, sy - size - 25, sx + 50, sy - size - 5, 
                         tocolor(255, 255, 255, 200), 0.6, "default-bold", "center", "bottom")
                 end
                 
-                -- HEALTH
                 if showHealth then
                     local health = getElementHealth(player)
                     local healthPercent = math.min(health / 100, 1)
@@ -189,7 +324,6 @@ local function renderESP()
     end
 end
 
--- Рендеринг
 addEventHandler("onClientRender", root, renderESP)
 
 -- ==================== ОЧИСТКА ====================
@@ -201,15 +335,28 @@ addEventHandler("onClientResourceStop", resourceRoot, function()
         resetFogDistance()
     end
     removeEventHandler("onClientRender", root, renderESP)
+    showCursor(false)
 end)
 
--- ==================== КОМАНДЫ ====================
+-- ==================== АДАПТАЦИЯ ЭКРАНА ====================
 
-outputChatBox("[ESP] Интерфейс загружен! Используйте /esp для открытия.", 0, 255, 0)
+addEventHandler("onClientScreenResize", root, function()
+    screenW, screenH = guiGetScreenSize()
+    local btnX = screenW * 0.85
+    local btnY = screenH * 0.80
+    guiSetPosition(toggleBtn, btnX, btnY, false)
+end)
+
+-- ==================== ЧАТ КОМАНДЫ ====================
+
+outputChatBox("📱 [ESP] Мобильная версия загружена!", 0, 255, 0)
+outputChatBox("💡 Нажмите зеленую кнопку 🔍 ESP в правом нижнем углу", 0, 255, 255)
+outputChatBox("🔄 Перетащите кнопку для удобства", 0, 255, 255)
+
 addCommandHandler("esp", function()
     local visible = guiGetVisible(gui)
     guiSetVisible(gui, not visible)
     showCursor(not visible)
 end)
 
-guiLabelSetText(lblStatus, "Статус: Используйте /esp для открытия")
+print("✅ Мобильный ESP успешно загружен!")
