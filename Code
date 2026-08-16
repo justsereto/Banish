@@ -1,6 +1,6 @@
-debugX = true  -- разрешить отладку (опционально)
+debugX = true
 
--- Загрузка Rayfield с ключом "123"
+-- Загрузка Rayfield с ключом 123
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
    Name = "ESP & Fog Control",
@@ -28,23 +28,37 @@ local Window = Rayfield:CreateWindow({
       FileName = "ESP_Key",
       SaveKey = true,
       GrabKeyFromSite = false,
-      Key = {"123"}  -- установлен ключ 123
+      Key = {"123"}
    }
 })
 
--- Создаём вкладку
-local Tab = Window:CreateTab("ESP", 4483362458)  -- иконка (можно заменить)
+local Tab = Window:CreateTab("ESP", 4483362458)
 
 -- Переменные состояний
 local espEnabled = false
 local showNames = false
 local fogOff = false
 
--- Хранилище для созданных объектов ESP
+-- Цвета по умолчанию
+local enemyColor = Color3.fromRGB(255, 0, 0)   -- красный
+local allyColor = Color3.fromRGB(0, 255, 0)     -- зелёный
+
+-- Хранилище ESP объектов
 local espObjects = {}
 local espConnections = {}
 
--- Функция очистки ESP для всех игроков
+-- Функция определения враг/союзник
+local function isEnemy(player)
+   local localPlayer = game.Players.LocalPlayer
+   if player == localPlayer then return false end
+   local localTeam = localPlayer.Team
+   local playerTeam = player.Team
+   -- Если у кого-то нет команды, считаем врагом (можно настроить)
+   if not localTeam or not playerTeam then return true end
+   return localTeam ~= playerTeam
+end
+
+-- Очистка ESP для всех
 local function clearESP()
    for _, data in pairs(espObjects) do
       if data.highlight then data.highlight:Destroy() end
@@ -53,13 +67,12 @@ local function clearESP()
    espObjects = {}
 end
 
--- Функция обновления ESP для одного игрока
+-- Обновление ESP для одного игрока
 local function updateESPForPlayer(player)
    if not player or not player.Character then return end
    local character = player.Character
    local data = espObjects[player]
 
-   -- Если ESP выключен, удаляем объекты
    if not espEnabled then
       if data then
          if data.highlight then data.highlight:Destroy() end
@@ -69,26 +82,31 @@ local function updateESPForPlayer(player)
       return
    end
 
-   -- Создаём данные, если их нет
    if not data then
       data = {}
       espObjects[player] = data
    end
 
-   -- Highlight (подсветка)
+   -- Определяем цвет
+   local color = isEnemy(player) and enemyColor or allyColor
+
+   -- Highlight
    if not data.highlight then
       local highlight = Instance.new("Highlight")
       highlight.Adornee = character
-      highlight.FillColor = Color3.fromRGB(255, 0, 0)
+      highlight.FillColor = color
       highlight.FillTransparency = 0.5
       highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
       highlight.OutlineTransparency = 0
       highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
       highlight.Parent = character
       data.highlight = highlight
+   else
+      -- Обновляем цвет, если изменился
+      data.highlight.FillColor = color
    end
 
-   -- BillboardGui с именем (если включено)
+   -- Billboard (имена)
    if showNames then
       if not data.billboard then
          local bill = Instance.new("BillboardGui")
@@ -102,21 +120,23 @@ local function updateESPForPlayer(player)
          label.Size = UDim2.new(1, 0, 1, 0)
          label.BackgroundTransparency = 1
          label.TextScaled = true
-         label.TextColor3 = Color3.fromRGB(255, 255, 255)
+         label.TextColor3 = color  -- цвет текста совпадает с цветом подсветки
          label.Font = Enum.Font.GothamBold
          label.TextStrokeTransparency = 0.5
          label.Parent = bill
 
          data.billboard = bill
          data.label = label
+      else
+         -- обновляем цвет текста
+         data.label.TextColor3 = color
       end
-      -- Обновляем текст (имя + здоровье, если есть)
+      -- Обновляем текст (имя + здоровье)
       local humanoid = character:FindFirstChild("Humanoid")
       local health = humanoid and math.floor(humanoid.Health) or "?"
       local name = player.Name
       data.label.Text = name .. "  ❤️" .. health
    else
-      -- Если имена выключены, удаляем билборд
       if data.billboard then
          data.billboard:Destroy()
          data.billboard = nil
@@ -125,7 +145,7 @@ local function updateESPForPlayer(player)
    end
 end
 
--- Функция обновления ESP для всех игроков
+-- Обновление всех игроков
 local function refreshAllESP()
    clearESP()
    if espEnabled then
@@ -137,19 +157,17 @@ local function refreshAllESP()
    end
 end
 
--- Подписываемся на события появления/исчезновения игроков
+-- Настройка событий
 local function setupConnections()
-   -- очищаем старые
    for _, conn in pairs(espConnections) do
       conn:Disconnect()
    end
    espConnections = {}
 
-   -- При добавлении игрока
    espConnections[#espConnections+1] = game.Players.PlayerAdded:Connect(function(player)
       if espEnabled then
          player.CharacterAdded:Connect(function(char)
-            wait(0.5) -- ждём загрузки
+            wait(0.5)
             updateESPForPlayer(player)
          end)
          if player.Character then
@@ -159,7 +177,6 @@ local function setupConnections()
       end
    end)
 
-   -- При удалении игрока
    espConnections[#espConnections+1] = game.Players.PlayerRemoving:Connect(function(player)
       if espObjects[player] then
          if espObjects[player].highlight then espObjects[player].highlight:Destroy() end
@@ -168,10 +185,10 @@ local function setupConnections()
       end
    end)
 
-   -- При изменении здоровья (для обновления билборда) – опционально, но для простоты обновляем по таймеру
+   -- Также реагируем на смену команды (можно переподключать, но проще обновлять по таймеру)
 end
 
--- Таймер обновления (каждые 2 секунды)
+-- Таймер обновления
 local function startUpdateLoop()
    spawn(function()
       while wait(2) do
@@ -186,7 +203,7 @@ local function startUpdateLoop()
    end)
 end
 
--- Функция включения/выключения ESP
+-- Вкл/Выкл ESP
 local function toggleESP(state)
    espEnabled = state
    if espEnabled then
@@ -201,7 +218,7 @@ local function toggleESP(state)
    end
 end
 
--- Функция включения/выключения имён
+-- Вкл/Выкл имён
 local function toggleNames(state)
    showNames = state
    if espEnabled then
@@ -209,7 +226,7 @@ local function toggleNames(state)
    end
 end
 
--- Функция отключения тумана
+-- Отключение тумана
 local function toggleFog(state)
    fogOff = state
    local lighting = game:GetService("Lighting")
@@ -217,13 +234,12 @@ local function toggleFog(state)
       lighting.FogEnd = 999999
       lighting.FogStart = 0
    else
-      -- восстанавливаем стандартные значения (можно сохранить предыдущие, но для простоты ставим дефолтные)
       lighting.FogEnd = 1000
       lighting.FogStart = 0
    end
 end
 
--- Создаём элементы интерфейса
+-- Создаём интерфейс
 local Section = Tab:CreateSection("Основные настройки")
 
 local ToggleESP = Tab:CreateToggle({
@@ -250,34 +266,39 @@ local ToggleFog = Tab:CreateToggle({
    end
 })
 
--- Загружаем сохранённые настройки (если есть)
+-- Настройки цветов
+local ColorSection = Tab:CreateSection("Цвета ESP")
+
+local EnemyColorPicker = Tab:CreateColorPicker({
+   Name = "Цвет врагов",
+   Color = enemyColor,
+   Callback = function(color)
+      enemyColor = color
+      if espEnabled then refreshAllESP() end
+   end
+})
+
+local AllyColorPicker = Tab:CreateColorPicker({
+   Name = "Цвет союзников",
+   Color = allyColor,
+   Callback = function(color)
+      allyColor = color
+      if espEnabled then refreshAllESP() end
+   end
+})
+
+-- Кнопка принудительного обновления
+local RefreshButton = Tab:CreateButton({
+   Name = "Обновить ESP",
+   Callback = function()
+      if espEnabled then refreshAllESP() end
+   end
+})
+
+-- Загрузка конфигурации
 Rayfield:LoadConfiguration()
 
--- Запускаем цикл обновления
+-- Запуск цикла обновления
 startUpdateLoop()
 
--- Инициализация при старте (если настройки уже были включены)
--- Т.к. LoadConfiguration загружает значения, но не вызывает Callback, нам нужно самим применить
--- Можно прочитать сохранённые значения через Rayfield:GetConfiguration() или просто вручную проверить
--- Для простоты, если есть сохранённые данные, применим их
-local config = Rayfield:GetConfiguration() -- если такая функция есть, но её нет в документации.
--- Вместо этого мы можем использовать глобальные переменные или просто подождать, пока пользователь включит вручную.
--- Но можно сделать так: после загрузки конфигурации применить состояние.
--- Я добавлю небольшой таймер для повторной проверки после загрузки.
-spawn(function()
-   wait(0.5)
-   -- Проверим состояние тогглов по их CurrentValue (но мы не можем получить их напрямую).
-   -- Мы можем сохранять значения в переменные при изменении и при загрузке конфигурации они восстановятся автоматически,
-   -- но Callback не вызывается, поэтому мы вручную вызовем функции с текущими значениями.
-   -- Для этого лучше использовать методы Get для тогглов? Их нет.
-   -- Поэтому мы просто будем применять настройки при старте, если они были включены в сохранении.
-   -- Но мы не знаем сохранённые значения. Можно сохранить их в таблицу и потом загрузить.
-   -- Я создам отдельную таблицу настроек и буду её сохранять через ConfigurationSaving? Но проще:
-   -- После загрузки Rayfield:LoadConfiguration() мы можем обратиться к внутреннему хранилищу, но это сложно.
-   -- Оставим как есть: пользователь сам включает настройки вручную.
-end)
-
--- Дополнительно: обработка смены персонажа у локального игрока (не влияет на ESP)
--- Можно игнорировать.
-
-print("ESP Hub загружен! Используйте ключ 123.")
+print("ESP Hub загружен! Ключ: 123")
