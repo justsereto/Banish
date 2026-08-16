@@ -1,6 +1,6 @@
 debugX = true
 
--- Загрузка Rayfield с ключом 123
+-- Загрузка Rayfield
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
    Name = "ESP & Fog Control",
@@ -39,7 +39,7 @@ local espEnabled = false
 local showNames = false
 local fogOff = false
 
--- Списки команд (будут заполняться через дропдауны)
+-- Списки команд (заполняются через дропдауны, могут содержать несколько названий)
 local enemyTeams = {}
 local allyTeams = {}
 
@@ -49,7 +49,13 @@ local allyColor = Color3.fromRGB(0, 255, 0)
 
 -- Хранилище объектов ESP
 local espObjects = {}
+
+-- Подписки на события
 local espConnections = {}
+
+-- Флаг для остановки цикла обновления (если понадобится)
+local updateRunning = false
+local updateConnection = nil
 
 -- Вспомогательная функция поиска в таблице
 local function tableFind(tbl, value)
@@ -82,7 +88,7 @@ local function clearESP()
    espObjects = {}
 end
 
--- Обновление ESP для одного игрока
+-- Обновление ESP для одного игрока (создаём или обновляем)
 local function updateESPForPlayer(player)
    if not player or not player.Character then return end
    local character = player.Character
@@ -104,7 +110,7 @@ local function updateESPForPlayer(player)
 
    local color = isEnemy(player) and enemyColor or allyColor
 
-   -- Highlight (подсветка)
+   -- Highlight
    if not data.highlight then
       local highlight = Instance.new("Highlight")
       highlight.Adornee = character
@@ -119,7 +125,7 @@ local function updateESPForPlayer(player)
       data.highlight.FillColor = color
    end
 
-   -- Billboard (имена и здоровье)
+   -- Billboard (имена + здоровье)
    if showNames then
       if not data.billboard then
          local bill = Instance.new("BillboardGui")
@@ -155,7 +161,7 @@ local function updateESPForPlayer(player)
    end
 end
 
--- Обновить всех игроков
+-- Обновить всех игроков (полная перезагрузка)
 local function refreshAllESP()
    clearESP()
    if espEnabled then
@@ -175,11 +181,11 @@ local function setupConnections()
    espConnections[#espConnections+1] = game.Players.PlayerAdded:Connect(function(player)
       if espEnabled then
          player.CharacterAdded:Connect(function()
-            wait(0.3)
+            task.wait(0.3)
             updateESPForPlayer(player)
          end)
          if player.Character then
-            wait(0.3)
+            task.wait(0.3)
             updateESPForPlayer(player)
          end
       end
@@ -194,19 +200,39 @@ local function setupConnections()
    end)
 end
 
--- Цикл обновления 20 раз в секунду (каждые 0.05 секунды)
+-- Запуск цикла обновления 20 раз в секунду через Heartbeat
 local function startUpdateLoop()
-   spawn(function()
-      while wait(0.05) do
-         if espEnabled then
-            for _, player in pairs(game.Players:GetPlayers()) do
-               if player ~= game.Players.LocalPlayer and player.Character then
-                  updateESPForPlayer(player)
-               end
+   if updateRunning then return end
+   updateRunning = true
+
+   local lastUpdate = tick()
+   local interval = 0.05  -- 20 раз в секунду
+
+   updateConnection = game:GetService("RunService").Heartbeat:Connect(function(delta)
+      if not espEnabled then
+         -- Если ESP выключен, можно не обновлять, но цикл продолжает работать
+         return
+      end
+      local now = tick()
+      if now - lastUpdate >= interval then
+         lastUpdate = now
+         -- Обновляем всех игроков
+         for _, player in pairs(game.Players:GetPlayers()) do
+            if player ~= game.Players.LocalPlayer and player.Character then
+               updateESPForPlayer(player)
             end
          end
       end
    end)
+end
+
+-- Остановка цикла (опционально)
+local function stopUpdateLoop()
+   if updateConnection then
+      updateConnection:Disconnect()
+      updateConnection = nil
+   end
+   updateRunning = false
 end
 
 -- Вкл/Выкл ESP
@@ -215,10 +241,15 @@ local function toggleESP(state)
    if espEnabled then
       refreshAllESP()
       setupConnections()
+      if not updateRunning then
+         startUpdateLoop()
+      end
    else
       clearESP()
       for _, conn in pairs(espConnections) do conn:Disconnect() end
       espConnections = {}
+      -- Остановка цикла не требуется, он продолжит работать, но проверяет espEnabled
+      -- Можно оставить цикл всегда работающим, но он будет простаивать
    end
 end
 
@@ -241,7 +272,7 @@ local function toggleFog(state)
    end
 end
 
--- Получить актуальный список команд
+-- Получить актуальный список команд (для дропдаунов)
 local function getTeamNames()
    local names = {}
    for _, team in pairs(game:GetService("Teams"):GetTeams()) do
@@ -283,10 +314,10 @@ local initialOptions = getTeamNames()
 local enemyDropdown = Tab:CreateDropdown({
    Name = "Команды-враги",
    Options = initialOptions,
-   Multiple = true,
-   CurrentValue = {},
+   Multiple = true,          -- разрешаем выбор нескольких
+   CurrentValue = {},        -- изначально пусто
    Callback = function(val)
-      enemyTeams = val
+      enemyTeams = val or {}
       if espEnabled then refreshAllESP() end
    end
 })
@@ -298,7 +329,7 @@ local allyDropdown = Tab:CreateDropdown({
    Multiple = true,
    CurrentValue = {},
    Callback = function(val)
-      allyTeams = val
+      allyTeams = val or {}
       if espEnabled then refreshAllESP() end
    end
 })
@@ -339,7 +370,7 @@ Tab:CreateColorPicker({
 })
 
 Tab:CreateButton({
-   Name = "Обновить ESP сейчас",
+   Name = "Обновить ESP сейчас (принудительно)",
    Callback = function()
       if espEnabled then refreshAllESP() end
    end
@@ -348,7 +379,7 @@ Tab:CreateButton({
 -- Загрузка сохранённой конфигурации
 Rayfield:LoadConfiguration()
 
--- Запуск цикла обновления (20 раз/сек)
+-- Запуск цикла обновления сразу (он будет ждать включения ESP)
 startUpdateLoop()
 
 print("ESP Hub загружен! Ключ: 123")
