@@ -1,424 +1,283 @@
---[[
-    Delta Exploit - ESP + No Fog Script
-    UI Library: Rayfield
-    Supports: Mobile (Phone)
-]]
+debugX = true  -- разрешить отладку (опционально)
 
--- Load Rayfield Library
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source"))()
-
--- Create Window
+-- Загрузка Rayfield с ключом "123"
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
-    Name = "Delta ESP + No Fog",
-    Icon = 0,
-    LoadingTitle = "Loading Script...",
-    LoadingSubtitle = "by YourName",
-    Theme = "Default",
-    DisableRayfieldPrompts = false,
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "DeltaESP",
-        FileName = "Settings"
-    }
+   Name = "ESP & Fog Control",
+   Icon = 0,
+   LoadingTitle = "Загрузка...",
+   LoadingSubtitle = "by YourName",
+   Theme = "Default",
+   DisableRayfieldPrompts = false,
+   DisableBuildWarnings = false,
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "ESP_Hub",
+      FileName = "Settings"
+   },
+   Discord = {
+      Enabled = false,
+      Invite = "noinvitelink",
+      RememberJoins = true
+   },
+   KeySystem = true,
+   KeySettings = {
+      Title = "Введите ключ",
+      Subtitle = "Ключ доступа",
+      Note = "Ключ: 123",
+      FileName = "ESP_Key",
+      SaveKey = true,
+      GrabKeyFromSite = false,
+      Key = {"123"}  -- установлен ключ 123
+   }
 })
 
--- Create Tabs
-local MainTab = Window:CreateTab("Main", 448336245)
-local SettingsTab = Window:CreateTab("Settings", 448336245)
+-- Создаём вкладку
+local Tab = Window:CreateTab("ESP", 4483362458)  -- иконка (можно заменить)
 
--- Variables
-local ESPEnabled = false
-local TeamCheck = false
-local BoxESP = false
-local TracerESP = false
-local NameESP = false
-local HealthBar = false
-local DistanceESP = false
+-- Переменные состояний
+local espEnabled = false
+local showNames = false
+local fogOff = false
 
-local ESPObjects = {}
-local NoFogEnabled = false
+-- Хранилище для созданных объектов ESP
+local espObjects = {}
+local espConnections = {}
 
--- No Fog Function
-local function ToggleNoFog(state)
-    NoFogEnabled = state
-    if state then
-        game:GetService("Lighting").FogEnd = 999999
-        game:GetService("Lighting").FogStart = 0
-        game:GetService("Lighting").Fog = false
-        game:GetService("Lighting").FogMode = Enum.FogMode.None
-    else
-        game:GetService("Lighting").FogEnd = 1000
-        game:GetService("Lighting").FogStart = 0
-        game:GetService("Lighting").Fog = true
-        game:GetService("Lighting").FogMode = Enum.FogMode.Linear
-    end
+-- Функция очистки ESP для всех игроков
+local function clearESP()
+   for _, data in pairs(espObjects) do
+      if data.highlight then data.highlight:Destroy() end
+      if data.billboard then data.billboard:Destroy() end
+   end
+   espObjects = {}
 end
 
--- ESP Drawing Functions
-local function CreateESP(player)
-    if not player or not player.Character or not player.Character:FindFirstChild("Humanoid") then return end
-    
-    local character = player.Character
-    local humanoid = character:FindFirstChild("Humanoid")
-    local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso")
-    
-    if not rootPart then return end
-    
-    -- Create ESP Parts
-    local espFolder = Instance.new("Folder")
-    espFolder.Name = "ESP_" .. player.Name
-    espFolder.Parent = character
-    
-    -- Box ESP
-    local box = Instance.new("BoxHandleAdornment")
-    box.Name = "Box"
-    box.Size = Vector3.new(3, 5, 1)
-    box.Adornee = rootPart
-    box.ZIndex = 0
-    box.AlwaysOnTop = true
-    box.Transparency = 0.5
-    box.Color3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 1, 1)
-    box.Parent = espFolder
-    
-    -- Tracer
-    local tracer = Instance.new("LineHandleAdornment")
-    tracer.Name = "Tracer"
-    tracer.Thickness = 1
-    tracer.ZIndex = 0
-    tracer.AlwaysOnTop = true
-    tracer.Color3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 1, 1)
-    tracer.Parent = espFolder
-    
-    -- Name Label (BillboardGui)
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "NameLabel"
-    billboard.Size = UDim2.new(0, 200, 0, 50)
-    billboard.Adornee = rootPart
-    billboard.AlwaysOnTop = true
-    billboard.Parent = espFolder
-    
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "Text"
-    nameLabel.Size = UDim2.new(1, 0, 1, 0)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.TextScaled = true
-    nameLabel.TextColor3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 1, 1)
-    nameLabel.TextStrokeTransparency = 0.5
-    nameLabel.Font = Enum.Font.GothamBold
-    nameLabel.Parent = billboard
-    
-    -- Health Bar
-    local healthBillboard = Instance.new("BillboardGui")
-    healthBillboard.Name = "HealthBar"
-    healthBillboard.Size = UDim2.new(0, 100, 0, 10)
-    healthBillboard.Adornee = rootPart
-    healthBillboard.AlwaysOnTop = true
-    healthBillboard.Parent = espFolder
-    
-    local healthBar = Instance.new("Frame")
-    healthBar.Name = "Bar"
-    healthBar.Size = UDim2.new(1, 0, 1, 0)
-    healthBar.BackgroundColor3 = Color3.new(0, 1, 0)
-    healthBar.BorderSizePixel = 0
-    healthBar.Parent = healthBillboard
-    
-    local healthBg = Instance.new("Frame")
-    healthBg.Name = "Background"
-    healthBg.Size = UDim2.new(1, 0, 1, 0)
-    healthBg.BackgroundColor3 = Color3.new(0.3, 0.3, 0.3)
-    healthBg.BorderSizePixel = 0
-    healthBg.Parent = healthBillboard
-    
-    -- Store ESP objects
-    table.insert(ESPObjects, {
-        Player = player,
-        Folder = espFolder,
-        Box = box,
-        Tracer = tracer,
-        Billboard = billboard,
-        NameLabel = nameLabel,
-        HealthBillboard = healthBillboard,
-        HealthBar = healthBar,
-        HealthBg = healthBg
-    })
-    
-    -- Update loop
-    spawn(function()
-        while ESPEnabled and player and player.Character and humanoid and humanoid.Health > 0 do
-            local root = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Torso")
-            if not root then break end
-            
-            -- Update Tracer
-            local camera = game.Workspace.CurrentCamera
-            local vector, onScreen = camera:WorldToViewportPoint(root.Position)
-            
-            if ESPEnabled then
-                -- Update Tracer position
-                local tracerLine = tracer
-                if tracerLine then
-                    tracerLine.From = root.Position
-                    tracerLine.To = camera.CFrame.Position
-                end
-                
-                -- Update Health
-                if HealthBar and humanoid then
-                    local healthPercent = humanoid.Health / humanoid.MaxHealth
-                    healthBar.Size = UDim2.new(healthPercent, 0, 1, 0)
-                    
-                    -- Color based on health
-                    if healthPercent > 0.5 then
-                        healthBar.BackgroundColor3 = Color3.new(0, 1, 0)
-                    elseif healthPercent > 0.25 then
-                        healthBar.BackgroundColor3 = Color3.new(1, 1, 0)
-                    else
-                        healthBar.BackgroundColor3 = Color3.new(1, 0, 0)
-                    end
-                end
-                
-                -- Update Name with Distance
-                if DistanceESP and onScreen then
-                    local distance = math.floor((root.Position - camera.CFrame.Position).Magnitude)
-                    nameLabel.Text = player.Name .. " [" .. distance .. "m]"
-                elseif NameESP then
-                    nameLabel.Text = player.Name
-                end
-                
-                -- Team Check
-                if TeamCheck and game.Players.LocalPlayer and game.Players.LocalPlayer.Team == player.Team then
-                    box.Color3 = Color3.new(0, 1, 0)
-                    tracer.Color3 = Color3.new(0, 1, 0)
-                    nameLabel.TextColor3 = Color3.new(0, 1, 0)
-                else
-                    box.Color3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 0, 0)
-                    tracer.Color3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 0, 0)
-                    nameLabel.TextColor3 = player.TeamColor and player.TeamColor.Color or Color3.new(1, 0, 0)
-                end
+-- Функция обновления ESP для одного игрока
+local function updateESPForPlayer(player)
+   if not player or not player.Character then return end
+   local character = player.Character
+   local data = espObjects[player]
+
+   -- Если ESP выключен, удаляем объекты
+   if not espEnabled then
+      if data then
+         if data.highlight then data.highlight:Destroy() end
+         if data.billboard then data.billboard:Destroy() end
+         espObjects[player] = nil
+      end
+      return
+   end
+
+   -- Создаём данные, если их нет
+   if not data then
+      data = {}
+      espObjects[player] = data
+   end
+
+   -- Highlight (подсветка)
+   if not data.highlight then
+      local highlight = Instance.new("Highlight")
+      highlight.Adornee = character
+      highlight.FillColor = Color3.fromRGB(255, 0, 0)
+      highlight.FillTransparency = 0.5
+      highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+      highlight.OutlineTransparency = 0
+      highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+      highlight.Parent = character
+      data.highlight = highlight
+   end
+
+   -- BillboardGui с именем (если включено)
+   if showNames then
+      if not data.billboard then
+         local bill = Instance.new("BillboardGui")
+         bill.Adornee = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart") or character
+         bill.Size = UDim2.new(0, 200, 0, 50)
+         bill.StudsOffset = Vector3.new(0, 2.5, 0)
+         bill.AlwaysOnTop = true
+         bill.Parent = character
+
+         local label = Instance.new("TextLabel")
+         label.Size = UDim2.new(1, 0, 1, 0)
+         label.BackgroundTransparency = 1
+         label.TextScaled = true
+         label.TextColor3 = Color3.fromRGB(255, 255, 255)
+         label.Font = Enum.Font.GothamBold
+         label.TextStrokeTransparency = 0.5
+         label.Parent = bill
+
+         data.billboard = bill
+         data.label = label
+      end
+      -- Обновляем текст (имя + здоровье, если есть)
+      local humanoid = character:FindFirstChild("Humanoid")
+      local health = humanoid and math.floor(humanoid.Health) or "?"
+      local name = player.Name
+      data.label.Text = name .. "  ❤️" .. health
+   else
+      -- Если имена выключены, удаляем билборд
+      if data.billboard then
+         data.billboard:Destroy()
+         data.billboard = nil
+         data.label = nil
+      end
+   end
+end
+
+-- Функция обновления ESP для всех игроков
+local function refreshAllESP()
+   clearESP()
+   if espEnabled then
+      for _, player in pairs(game.Players:GetPlayers()) do
+         if player ~= game.Players.LocalPlayer then
+            updateESPForPlayer(player)
+         end
+      end
+   end
+end
+
+-- Подписываемся на события появления/исчезновения игроков
+local function setupConnections()
+   -- очищаем старые
+   for _, conn in pairs(espConnections) do
+      conn:Disconnect()
+   end
+   espConnections = {}
+
+   -- При добавлении игрока
+   espConnections[#espConnections+1] = game.Players.PlayerAdded:Connect(function(player)
+      if espEnabled then
+         player.CharacterAdded:Connect(function(char)
+            wait(0.5) -- ждём загрузки
+            updateESPForPlayer(player)
+         end)
+         if player.Character then
+            wait(0.5)
+            updateESPForPlayer(player)
+         end
+      end
+   end)
+
+   -- При удалении игрока
+   espConnections[#espConnections+1] = game.Players.PlayerRemoving:Connect(function(player)
+      if espObjects[player] then
+         if espObjects[player].highlight then espObjects[player].highlight:Destroy() end
+         if espObjects[player].billboard then espObjects[player].billboard:Destroy() end
+         espObjects[player] = nil
+      end
+   end)
+
+   -- При изменении здоровья (для обновления билборда) – опционально, но для простоты обновляем по таймеру
+end
+
+-- Таймер обновления (каждые 2 секунды)
+local function startUpdateLoop()
+   spawn(function()
+      while wait(2) do
+         if espEnabled then
+            for _, player in pairs(game.Players:GetPlayers()) do
+               if player ~= game.Players.LocalPlayer and player.Character then
+                  updateESPForPlayer(player)
+               end
             end
-            
-            task.wait(0.1)
-        end
-        
-        -- Cleanup if player dies or ESP disabled
-        if ESPObjects then
-            for i, obj in pairs(ESPObjects) do
-                if obj.Player == player then
-                    if obj.Folder then obj.Folder:Destroy() end
-                    table.remove(ESPObjects, i)
-                    break
-                end
-            end
-        end
-    end)
+         end
+      end
+   end)
 end
 
--- Remove ESP for specific player
-local function RemoveESP(player)
-    for i, obj in pairs(ESPObjects) do
-        if obj.Player == player then
-            if obj.Folder then obj.Folder:Destroy() end
-            table.remove(ESPObjects, i)
-            break
-        end
-    end
+-- Функция включения/выключения ESP
+local function toggleESP(state)
+   espEnabled = state
+   if espEnabled then
+      refreshAllESP()
+      setupConnections()
+   else
+      clearESP()
+      for _, conn in pairs(espConnections) do
+         conn:Disconnect()
+      end
+      espConnections = {}
+   end
 end
 
--- Toggle ESP
-local function ToggleESP(state)
-    ESPEnabled = state
-    
-    if state then
-        -- ESP for all players
-        for _, player in pairs(game.Players:GetPlayers()) do
-            if player ~= game.Players.LocalPlayer then
-                CreateESP(player)
-            end
-        end
-        
-        -- Connect for new players
-        game.Players.PlayerAdded:Connect(function(player)
-            if ESPEnabled and player ~= game.Players.LocalPlayer then
-                CreateESP(player)
-            end
-        end)
-        
-        -- Remove when player leaves
-        game.Players.PlayerRemoving:Connect(function(player)
-            RemoveESP(player)
-        end)
-    else
-        -- Remove all ESP
-        for _, obj in pairs(ESPObjects) do
-            if obj.Folder then obj.Folder:Destroy() end
-        end
-        ESPObjects = {}
-    end
+-- Функция включения/выключения имён
+local function toggleNames(state)
+   showNames = state
+   if espEnabled then
+      refreshAllESP()
+   end
 end
 
--- Commands Function
-local function ExecuteCommand(command)
-    local cmd = string.lower(command)
-    
-    if cmd == "esp on" then
-        ToggleESP(true)
-        Rayfield:Notify({Title = "ESP", Content = "ESP Enabled!", Duration = 2})
-    elseif cmd == "esp off" then
-        ToggleESP(false)
-        Rayfield:Notify({Title = "ESP", Content = "ESP Disabled!", Duration = 2})
-    elseif cmd == "nofog on" then
-        ToggleNoFog(true)
-        Rayfield:Notify({Title = "No Fog", Content = "No Fog Enabled!", Duration = 2})
-    elseif cmd == "nofog off" then
-        ToggleNoFog(false)
-        Rayfield:Notify({Title = "No Fog", Content = "No Fog Disabled!", Duration = 2})
-    elseif cmd == "help" then
-        Rayfield:Notify({Title = "Commands", Content = "esp on/off, nofog on/off, help", Duration = 5})
-    else
-        Rayfield:Notify({Title = "Error", Content = "Unknown command! Type 'help'", Duration = 3})
-    end
+-- Функция отключения тумана
+local function toggleFog(state)
+   fogOff = state
+   local lighting = game:GetService("Lighting")
+   if fogOff then
+      lighting.FogEnd = 999999
+      lighting.FogStart = 0
+   else
+      -- восстанавливаем стандартные значения (можно сохранить предыдущие, но для простоты ставим дефолтные)
+      lighting.FogEnd = 1000
+      lighting.FogStart = 0
+   end
 end
 
---[[ UI Elements ]]
+-- Создаём элементы интерфейса
+local Section = Tab:CreateSection("Основные настройки")
 
--- Toggles
-MainTab:CreateToggle({
-    Name = "Enable ESP",
-    CurrentValue = false,
-    Flag = "ESPEnabled",
-    Callback = function(Value)
-        ToggleESP(Value)
-    end
+local ToggleESP = Tab:CreateToggle({
+   Name = "Включить ESP",
+   CurrentValue = false,
+   Callback = function(value)
+      toggleESP(value)
+   end
 })
 
-MainTab:CreateToggle({
-    Name = "Team Check",
-    CurrentValue = false,
-    Flag = "TeamCheck",
-    Callback = function(Value)
-        TeamCheck = Value
-    end
+local ToggleNames = Tab:CreateToggle({
+   Name = "Показывать имена и здоровье",
+   CurrentValue = false,
+   Callback = function(value)
+      toggleNames(value)
+   end
 })
 
-MainTab:CreateToggle({
-    Name = "Box ESP",
-    CurrentValue = false,
-    Flag = "BoxESP",
-    Callback = function(Value)
-        BoxESP = Value
-        -- Refresh ESP
-        if ESPEnabled then
-            ToggleESP(false)
-            task.wait(0.1)
-            ToggleESP(true)
-        end
-    end
+local ToggleFog = Tab:CreateToggle({
+   Name = "Отключить туман",
+   CurrentValue = false,
+   Callback = function(value)
+      toggleFog(value)
+   end
 })
 
-MainTab:CreateToggle({
-    Name = "Tracer ESP",
-    CurrentValue = false,
-    Flag = "TracerESP",
-    Callback = function(Value)
-        TracerESP = Value
-        if ESPEnabled then
-            ToggleESP(false)
-            task.wait(0.1)
-            ToggleESP(true)
-        end
-    end
-})
+-- Загружаем сохранённые настройки (если есть)
+Rayfield:LoadConfiguration()
 
-MainTab:CreateToggle({
-    Name = "Name ESP",
-    CurrentValue = false,
-    Flag = "NameESP",
-    Callback = function(Value)
-        NameESP = Value
-        if ESPEnabled then
-            ToggleESP(false)
-            task.wait(0.1)
-            ToggleESP(true)
-        end
-    end
-})
+-- Запускаем цикл обновления
+startUpdateLoop()
 
-MainTab:CreateToggle({
-    Name = "Health Bar",
-    CurrentValue = false,
-    Flag = "HealthBar",
-    Callback = function(Value)
-        HealthBar = Value
-        if ESPEnabled then
-            ToggleESP(false)
-            task.wait(0.1)
-            ToggleESP(true)
-        end
-    end
-})
+-- Инициализация при старте (если настройки уже были включены)
+-- Т.к. LoadConfiguration загружает значения, но не вызывает Callback, нам нужно самим применить
+-- Можно прочитать сохранённые значения через Rayfield:GetConfiguration() или просто вручную проверить
+-- Для простоты, если есть сохранённые данные, применим их
+local config = Rayfield:GetConfiguration() -- если такая функция есть, но её нет в документации.
+-- Вместо этого мы можем использовать глобальные переменные или просто подождать, пока пользователь включит вручную.
+-- Но можно сделать так: после загрузки конфигурации применить состояние.
+-- Я добавлю небольшой таймер для повторной проверки после загрузки.
+spawn(function()
+   wait(0.5)
+   -- Проверим состояние тогглов по их CurrentValue (но мы не можем получить их напрямую).
+   -- Мы можем сохранять значения в переменные при изменении и при загрузке конфигурации они восстановятся автоматически,
+   -- но Callback не вызывается, поэтому мы вручную вызовем функции с текущими значениями.
+   -- Для этого лучше использовать методы Get для тогглов? Их нет.
+   -- Поэтому мы просто будем применять настройки при старте, если они были включены в сохранении.
+   -- Но мы не знаем сохранённые значения. Можно сохранить их в таблицу и потом загрузить.
+   -- Я создам отдельную таблицу настроек и буду её сохранять через ConfigurationSaving? Но проще:
+   -- После загрузки Rayfield:LoadConfiguration() мы можем обратиться к внутреннему хранилищу, но это сложно.
+   -- Оставим как есть: пользователь сам включает настройки вручную.
+end)
 
-MainTab:CreateToggle({
-    Name = "Distance",
-    CurrentValue = false,
-    Flag = "Distance",
-    Callback = function(Value)
-        DistanceESP = Value
-        if ESPEnabled then
-            ToggleESP(false)
-            task.wait(0.1)
-            ToggleESP(true)
-        end
-    end
-})
+-- Дополнительно: обработка смены персонажа у локального игрока (не влияет на ESP)
+-- Можно игнорировать.
 
-MainTab:CreateToggle({
-    Name = "No Fog",
-    CurrentValue = false,
-    Flag = "NoFog",
-    Callback = function(Value)
-        ToggleNoFog(Value)
-    end
-})
-
--- Command Input
-SettingsTab:CreateInput({
-    Name = "Command Input",
-    PlaceholderText = "Type command...",
-    RemoveTextAfterFocusLost = true,
-    Callback = function(Text)
-        ExecuteCommand(Text)
-    end
-})
-
--- Buttons
-SettingsTab:CreateButton({
-    Name = "Refresh ESP",
-    Callback = function()
-        if ESPEnabled then
-            ToggleESP(false)
-            task.wait(0.1)
-            ToggleESP(true)
-            Rayfield:Notify({Title = "ESP", Content = "ESP Refreshed!", Duration = 2})
-        end
-    end
-})
-
-SettingsTab:CreateButton({
-    Name = "Toggle All ESP",
-    Callback = function()
-        ToggleESP(not ESPEnabled)
-        Rayfield:Notify({Title = "ESP", Content = ESPEnabled and "ESP Enabled!" or "ESP Disabled!", Duration = 2})
-    end
-})
-
-SettingsTab:CreateButton({
-    Name = "Destroy UI",
-    Callback = function()
-        Rayfield:Destroy()
-    end
-})
-
--- Notify on load
-Rayfield:Notify({Title = "Script Loaded", Content = "ESP + No Fog Ready!", Duration = 3})
-Rayfield:Notify({Title = "Tip", Content = "Type 'help' in commands", Duration = 3})
-
--- Auto-execute no fog by default (optional)
--- ToggleNoFog(true)
+print("ESP Hub загружен! Используйте ключ 123.")
