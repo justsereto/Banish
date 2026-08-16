@@ -1,318 +1,630 @@
-debugX = true -- Enable debug mode for Delta
+-- debugX = true
+-- Включаем режим отладки для вывода сообщений
+debugX = true
+local function DebugPrint(...)
+    if debugX then
+        print(...)
+    end
+end
 
+-- Загрузка Rayfield UI
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+if not Rayfield then
+    DebugPrint("Не удалось загрузить Rayfield")
+    return
+end
 
--- Create main window
+-- Создание главного окна
 local Window = Rayfield:CreateWindow({
-   Name = "Entrenched - Delta Hub",
-   Icon = 0,
-   LoadingTitle = "Loading Entrenched Hub...",
-   LoadingSubtitle = "by Delta",
-   Theme = "Dark",
-   DisableRayfieldPrompts = false,
-   DisableBuildWarnings = false,
-   ConfigurationSaving = {
-      Enabled = true,
-      FolderName = "EntrenchedDelta",
-      FileName = "Config"
-   },
-   Discord = {
-      Enabled = false,
-      Invite = "",
-      RememberJoins = true
-   },
-   KeySystem = false
+    Name = "Entrenched Delta",
+    Icon = 0,
+    LoadingTitle = "Entrenched Cheat",
+    LoadingSubtitle = "by Delta",
+    Theme = "Dark",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "EntrenchedConfigs",
+        FileName = "Settings"
+    },
+    Discord = {
+        Enabled = false,
+    },
+    KeySystem = false,
 })
 
--- ======== TABS ========
-local CombatTab = Window:CreateTab("Combat", 4483362458) -- rifle icon
+-- Вкладки
+local AimbotTab = Window:CreateTab("Aimbot", 4483362458)
 local VisualsTab = Window:CreateTab("Visuals", 4483362458)
-local PlayerTab = Window:CreateTab("Player", 4483362458)
+local MovementTab = Window:CreateTab("Movement", 4483362458)
+local WeaponsTab = Window:CreateTab("Weapons", 4483362458)
 local MiscTab = Window:CreateTab("Misc", 4483362458)
 
--- ======== COMBAT TAB ========
-local CombatSection = CombatTab:CreateSection("Aimbot")
-local AimbotToggle = CombatTab:CreateToggle({
-   Name = "Aimbot",
-   CurrentValue = false,
-   Flag = "Aimbot",
-   Callback = function(Value)
-      getgenv().AimbotEnabled = Value
-      if Value then
-         spawn(function()
-            while getgenv().AimbotEnabled do
-               pcall(function()
-                  local Players = game:GetService("Players")
-                  local LocalPlayer = Players.LocalPlayer
-                  local Character = LocalPlayer.Character
-                  if not Character or not Character:FindFirstChild("Humanoid") then wait(0.5) continue end
-                  local Camera = workspace.CurrentCamera
-                  local Closest = nil
-                  local ClosestDist = math.huge
-                  for _, v in pairs(Players:GetPlayers()) do
-                     if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
-                        local Head = v.Character:FindFirstChild("Head")
-                        if Head then
-                           local ScreenPos, OnScreen = Camera:WorldToScreenPoint(Head.Position)
-                           if OnScreen then
-                              local Dist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
-                              if Dist < ClosestDist then
-                                 Closest = v
-                                 ClosestDist = Dist
-                              end
-                           end
-                        end
-                     end
-                  end
-                  if Closest and Closest.Character and Closest.Character:FindFirstChild("Head") then
-                     local HeadPos = Closest.Character.Head.Position
-                     Camera.CFrame = CFrame.new(Camera.CFrame.Position, HeadPos)
-                  end
-               end)
-               wait()
+-- ---------- Глобальные переменные для состояния ----------
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+
+-- Настройки (будут сохраняться через Rayfield)
+local Settings = {
+    -- Aimbot
+    AimbotEnabled = false,
+    AimbotFOV = 120,
+    AimbotSmoothness = 0.3,
+    AimbotPart = "Head", -- или "Torso"
+    AimbotKey = "MouseButton2", -- правая кнопка мыши
+    
+    -- Visuals
+    ESPEnabled = false,
+    ESPBox = true,
+    ESPName = true,
+    ESPHealth = true,
+    ESPDistance = true,
+    ESPTrajectory = false,
+    ESPTeamColor = true,
+    Wallhack = false,
+    
+    -- Movement
+    SpeedHackEnabled = false,
+    SpeedMultiplier = 2,
+    InfiniteJump = false,
+    Noclip = false,
+    
+    -- Weapons
+    InfiniteAmmo = false,
+    FastFire = false,
+    NoRecoil = false,
+    NoSpread = false,
+    
+    -- Misc
+    AutoHeal = false,
+    HealThreshold = 30,
+}
+
+-- ---------- Вспомогательные функции ----------
+function GetPlayers()
+    local list = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            table.insert(list, player)
+        end
+    end
+    return list
+end
+
+function GetClosestPlayer(FOV)
+    local closest = nil
+    local shortest = FOV or math.huge
+    local mousePos = UserInputService:GetMouseLocation()
+    local center = Vector2.new(mousePos.X, mousePos.Y)
+    
+    for _, player in ipairs(GetPlayers()) do
+        local char = player.Character
+        if char then
+            local part = char:FindFirstChild(Settings.AimbotPart) or char:FindFirstChild("Head") or char:FindFirstChild("Torso")
+            if part then
+                local screenPos, onScreen = Camera:WorldToScreenPoint(part.Position)
+                if onScreen then
+                    local vec = Vector2.new(screenPos.X, screenPos.Y) - center
+                    local dist = vec.Magnitude
+                    if dist < shortest then
+                        shortest = dist
+                        closest = player
+                    end
+                end
             end
-         end)
-      end
-   end
-})
+        end
+    end
+    return closest, shortest
+end
 
-local AimbotFOV = CombatTab:CreateSlider({
-   Name = "Aimbot FOV",
-   Range = {0, 180},
-   Increment = 1,
-   Suffix = "°",
-   CurrentValue = 90,
-   Flag = "AimbotFOV",
-   Callback = function(Value)
-      getgenv().AimbotFOV = Value
-   end
-})
+function GetWeapon()
+    local char = Character
+    if char then
+        local tool = char:FindFirstChildOfClass("Tool")
+        if tool then
+            return tool
+        end
+    end
+    return nil
+end
 
-CombatTab:CreateSection("Weapon Mods")
-local NoRecoil = CombatTab:CreateToggle({
-   Name = "No Recoil",
-   CurrentValue = false,
-   Flag = "NoRecoil",
-   Callback = function(Value)
-      getgenv().NoRecoil = Value
-      if Value then
-         -- Implement no recoil (example: hook to weapon recoil property)
-         game:GetService("RunService").RenderStepped:Connect(function()
-            if getgenv().NoRecoil then
-               pcall(function()
-                  local char = game.Players.LocalPlayer.Character
-                  if char and char:FindFirstChild("Humanoid") then
-                     -- Adjust based on actual weapon system; this is generic
-                     local tool = char:FindFirstChildOfClass("Tool")
-                     if tool and tool:FindFirstChild("Recoil") then
-                        tool.Recoil.Value = 0
-                     end
-                  end
-               end)
+-- ---------- Функции для Aimbot ----------
+local aimbotRunning = false
+function AimbotLoop()
+    if not Settings.AimbotEnabled then return end
+    local target, dist = GetClosestPlayer(Settings.AimbotFOV)
+    if target and Settings.AimbotEnabled then
+        local char = target.Character
+        if char then
+            local part = char:FindFirstChild(Settings.AimbotPart) or char:FindFirstChild("Head") or char:FindFirstChild("Torso")
+            if part then
+                local targetPos = part.Position
+                -- Плавное прицеливание
+                local currentCFrame = Camera.CFrame
+                local lookAt = CFrame.new(currentCFrame.Position, targetPos)
+                local lerped = currentCFrame:Lerp(lookAt, Settings.AimbotSmoothness)
+                Camera.CFrame = lerped
             end
-         end)
-      end
-   end
-})
+        end
+    end
+end
 
-local InfiniteAmmo = CombatTab:CreateToggle({
-   Name = "Infinite Ammo",
-   CurrentValue = false,
-   Flag = "InfiniteAmmo",
-   Callback = function(Value)
-      getgenv().InfiniteAmmo = Value
-      game:GetService("RunService").Stepped:Connect(function()
-         if getgenv().InfiniteAmmo then
-            pcall(function()
-               local char = game.Players.LocalPlayer.Character
-               if char then
-                  for _, tool in pairs(char:GetChildren()) do
-                     if tool:IsA("Tool") and tool:FindFirstChild("Ammo") then
-                        tool.Ammo.Value = tool.Ammo.MaxValue
-                     end
-                  end
-               end
-            end)
-         end
-      end)
-   end
-})
+-- Привязка кнопки для аимбота (удержание)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 and Settings.AimbotEnabled then
+        aimbotRunning = true
+        while aimbotRunning and Settings.AimbotEnabled do
+            AimbotLoop()
+            RunService.RenderStepped:Wait()
+        end
+    end
+end)
 
--- ======== VISUALS TAB ========
-local VisualsSection = VisualsTab:CreateSection("ESP")
-local ESPToggle = VisualsTab:CreateToggle({
-   Name = "ESP Boxes",
-   CurrentValue = false,
-   Flag = "ESP",
-   Callback = function(Value)
-      getgenv().ESPEnabled = Value
-      if Value then
-         spawn(function()
-            while getgenv().ESPEnabled do
-               pcall(function()
-                  local Players = game:GetService("Players")
-                  local LocalPlayer = Players.LocalPlayer
-                  for _, v in pairs(Players:GetPlayers()) do
-                     if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
-                        local head = v.Character:FindFirstChild("Head")
-                        if head then
-                           local pos, onScreen = workspace.CurrentCamera:WorldToScreenPoint(head.Position)
-                           if onScreen then
-                              -- Simple box drawing (use Drawing library)
-                              local box = Drawing.new("Square")
-                              box.Visible = true
-                              box.Color = Color3.fromRGB(255, 0, 0)
-                              box.Thickness = 2
-                              box.Size = Vector2.new(50, 100)
-                              box.Position = Vector2.new(pos.X - 25, pos.Y - 50)
-                              -- Store in table to clean up
-                              if not getgenv().ESPObjects then getgenv().ESPObjects = {} end
-                              table.insert(getgenv().ESPObjects, box)
-                           end
-                        end
-                     end
-                  end
-               end)
-               wait(0.1)
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        aimbotRunning = false
+    end
+end)
+
+-- ---------- ESP (рисование) ----------
+local espObjects = {}
+function UpdateESP()
+    if not Settings.ESPEnabled then
+        -- Удаляем все ESP объекты
+        for _, obj in ipairs(espObjects) do
+            obj:Remove()
+        end
+        espObjects = {}
+        return
+    end
+    
+    -- Очищаем старые объекты
+    for _, obj in ipairs(espObjects) do
+        obj:Remove()
+    end
+    espObjects = {}
+    
+    for _, player in ipairs(GetPlayers()) do
+        local char = player.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("Head")
+            if root then
+                local pos, onScreen = Camera:WorldToScreenPoint(root.Position)
+                if onScreen then
+                    local teamColor = player.Team and player.Team.TeamColor and player.Team.TeamColor.Color or Color3.new(1,1,1)
+                    local color = Settings.ESPTeamColor and teamColor or Color3.new(0,1,0)
+                    
+                    -- Box ESP
+                    if Settings.ESPBox then
+                        local size = Vector2.new(80, 120) -- примерный размер
+                        local box = Drawing.new("Square")
+                        box.Visible = true
+                        box.Position = Vector2.new(pos.X - size.X/2, pos.Y - size.Y/2)
+                        box.Size = size
+                        box.Color = color
+                        box.Thickness = 2
+                        box.Filled = false
+                        table.insert(espObjects, box)
+                    end
+                    
+                    -- Name ESP
+                    if Settings.ESPName then
+                        local nameText = Drawing.new("Text")
+                        nameText.Visible = true
+                        nameText.Position = Vector2.new(pos.X, pos.Y - 80)
+                        nameText.Text = player.Name
+                        nameText.Color = color
+                        nameText.Size = 16
+                        nameText.Center = true
+                        nameText.Outline = true
+                        nameText.OutlineColor = Color3.new(0,0,0)
+                        table.insert(espObjects, nameText)
+                    end
+                    
+                    -- Health ESP
+                    if Settings.ESPHealth then
+                        local health = char.Humanoid and char.Humanoid.Health or 100
+                        local healthBar = Drawing.new("Line")
+                        healthBar.Visible = true
+                        healthBar.From = Vector2.new(pos.X - 30, pos.Y + 30)
+                        healthBar.To = Vector2.new(pos.X - 30 + health/2, pos.Y + 30)
+                        healthBar.Color = Color3.new(1 - health/100, health/100, 0)
+                        healthBar.Thickness = 6
+                        table.insert(espObjects, healthBar)
+                    end
+                    
+                    -- Distance ESP
+                    if Settings.ESPDistance then
+                        local dist = (Camera.CFrame.Position - root.Position).Magnitude
+                        local distText = Drawing.new("Text")
+                        distText.Visible = true
+                        distText.Position = Vector2.new(pos.X, pos.Y + 40)
+                        distText.Text = string.format("%.0fm", dist)
+                        distText.Color = Color3.new(1,1,1)
+                        distText.Size = 14
+                        distText.Center = true
+                        distText.Outline = true
+                        distText.OutlineColor = Color3.new(0,0,0)
+                        table.insert(espObjects, distText)
+                    end
+                end
             end
-         end)
-      else
-         -- Clean up drawings
-         if getgenv().ESPObjects then
-            for _, obj in pairs(getgenv().ESPObjects) do
-               obj:Remove()
+        end
+    end
+end
+
+-- Обновляем ESP каждый кадр
+RunService.RenderStepped:Connect(UpdateESP)
+
+-- ---------- Wallhack (прозрачность стен) ----------
+-- Простой способ: меняем материалы или прозрачность, но для простоты будем использовать симуляцию через ESP (уже видно сквозь стены если ESP рисует поверх)
+-- В реальности можно использовать просмотр через стены, но в Roblox это сложно.
+-- Оставим как фикцию, можно добавить изменение освещения.
+
+-- ---------- Movement ----------
+-- SpeedHack
+RunService.Heartbeat:Connect(function()
+    if Settings.SpeedHackEnabled and Humanoid then
+        Humanoid.WalkSpeed = 16 * Settings.SpeedMultiplier
+    elseif Humanoid then
+        Humanoid.WalkSpeed = 16 -- стандартная скорость
+    end
+end)
+
+-- Infinite Jump
+local jumpCount = 0
+local maxJumps = 2 -- обычный прыжок + дополнительный
+UserInputService.JumpRequest:Connect(function()
+    if Settings.InfiniteJump and Humanoid then
+        if Humanoid:GetState() == Enum.HumanoidStateType.Jumping or Humanoid:GetState() == Enum.HumanoidStateType.Freefall then
+            if jumpCount < 10 then -- бесконечно
+                Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                jumpCount = jumpCount + 1
             end
-            getgenv().ESPObjects = {}
-         end
-      end
-   end
-})
+        else
+            jumpCount = 0
+        end
+    end
+end)
 
-local HealthBar = VisualsTab:CreateToggle({
-   Name = "Health Bar",
-   CurrentValue = false,
-   Flag = "HealthBar",
-   Callback = function(Value)
-      getgenv().HealthBar = Value
-   end
-})
-
--- ======== PLAYER TAB ========
-local PlayerSection = PlayerTab:CreateSection("Movement")
-local SpeedSlider = PlayerTab:CreateSlider({
-   Name = "Walk Speed",
-   Range = {16, 100},
-   Increment = 1,
-   Suffix = " speed",
-   CurrentValue = 16,
-   Flag = "Speed",
-   Callback = function(Value)
-      getgenv().SpeedValue = Value
-      game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = Value
-   end
-})
-
-local JumpSlider = PlayerTab:CreateSlider({
-   Name = "Jump Power",
-   Range = {50, 200},
-   Increment = 1,
-   Suffix = " power",
-   CurrentValue = 50,
-   Flag = "JumpPower",
-   Callback = function(Value)
-      getgenv().JumpPower = Value
-      game.Players.LocalPlayer.Character.Humanoid.JumpPower = Value
-   end
-})
-
-local FlyToggle = PlayerTab:CreateToggle({
-   Name = "Fly",
-   CurrentValue = false,
-   Flag = "Fly",
-   Callback = function(Value)
-      getgenv().FlyEnabled = Value
-      if Value then
-         local char = game.Players.LocalPlayer.Character
-         if char and char:FindFirstChild("Humanoid") then
-            char.Humanoid.PlatformStand = true
-         end
-         spawn(function()
-            local bodyVelocity = Instance.new("BodyVelocity")
-            bodyVelocity.MaxForce = Vector3.new(1, 1, 1) * 1e9
-            bodyVelocity.P = 1e5
-            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-            bodyVelocity.Parent = game.Players.LocalPlayer.Character.HumanoidRootPart
-            local speed = 50
-            while getgenv().FlyEnabled do
-               local moveVector = Vector3.new(0, 0, 0)
-               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.W) then moveVector = moveVector + Vector3.new(0, 0, -speed) end
-               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.S) then moveVector = moveVector + Vector3.new(0, 0, speed) end
-               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.A) then moveVector = moveVector + Vector3.new(-speed, 0, 0) end
-               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.D) then moveVector = moveVector + Vector3.new(speed, 0, 0) end
-               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.Space) then moveVector = moveVector + Vector3.new(0, speed, 0) end
-               if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.LeftShift) then moveVector = moveVector + Vector3.new(0, -speed, 0) end
-               if bodyVelocity and bodyVelocity.Parent then
-                  bodyVelocity.Velocity = workspace.CurrentCamera.CFrame:VectorToWorldSpace(moveVector)
-               end
-               wait()
+-- Noclip
+RunService.Stepped:Connect(function()
+    if Settings.Noclip and Character then
+        for _, part in ipairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
             end
-            if bodyVelocity then bodyVelocity:Destroy() end
-            if char and char:FindFirstChild("Humanoid") then
-               char.Humanoid.PlatformStand = false
+        end
+    elseif Character then
+        for _, part in ipairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.CanCollide = true
             end
-         end)
-      else
-         -- Stop fly
-         local char = game.Players.LocalPlayer.Character
-         if char and char:FindFirstChild("Humanoid") then
-            char.Humanoid.PlatformStand = false
-         end
-      end
-   end
-})
+        end
+    end
+end)
 
--- ======== MISC TAB ========
-local MiscSection = MiscTab:CreateSection("Utility")
-local TeleportButton = MiscTab:CreateButton({
-   Name = "Teleport to Enemy",
-   Callback = function()
-      local Players = game:GetService("Players")
-      local LocalPlayer = Players.LocalPlayer
-      local closest = nil
-      local dist = math.huge
-      for _, v in pairs(Players:GetPlayers()) do
-         if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
-            local root = v.Character.HumanoidRootPart
-            local mag = (root.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-            if mag < dist then
-               dist = mag
-               closest = v
+-- ---------- Weapons ----------
+-- Infinite Ammo (попытка через изменение патронов в оружии)
+RunService.Heartbeat:Connect(function()
+    if Settings.InfiniteAmmo then
+        local weapon = GetWeapon()
+        if weapon and weapon:FindFirstChild("Ammo") then
+            local ammo = weapon.Ammo
+            if ammo:IsA("NumberValue") then
+                ammo.Value = 999
             end
-         end
-      end
-      if closest and closest.Character and closest.Character:FindFirstChild("HumanoidRootPart") then
-         LocalPlayer.Character.HumanoidRootPart.CFrame = closest.Character.HumanoidRootPart.CFrame * CFrame.new(0, 3, 5)
-      end
-   end
+        end
+    end
+end)
+
+-- Fast Fire (уменьшение задержки между выстрелами)
+RunService.Heartbeat:Connect(function()
+    if Settings.FastFire then
+        local weapon = GetWeapon()
+        if weapon then
+            -- Ищем все возможные свойства, связанные с перезарядкой
+            for _, child in ipairs(weapon:GetDescendants()) do
+                if child:IsA("NumberValue") and (child.Name:lower():find("cooldown") or child.Name:lower():find("fire") or child.Name:lower():find("rate")) then
+                    child.Value = 0
+                end
+            end
+        end
+    end
+end)
+
+-- No Recoil (убираем отклонение прицела)
+RunService.Heartbeat:Connect(function()
+    if Settings.NoRecoil then
+        local weapon = GetWeapon()
+        if weapon then
+            for _, child in ipairs(weapon:GetDescendants()) do
+                if child:IsA("NumberValue") and (child.Name:lower():find("recoil") or child.Name:lower():find("kick")) then
+                    child.Value = 0
+                end
+            end
+        end
+    end
+end)
+
+-- No Spread (убираем разброс)
+RunService.Heartbeat:Connect(function()
+    if Settings.NoSpread then
+        local weapon = GetWeapon()
+        if weapon then
+            for _, child in ipairs(weapon:GetDescendants()) do
+                if child:IsA("NumberValue") and (child.Name:lower():find("spread") or child.Name:lower():find("accuracy")) then
+                    child.Value = 0
+                end
+            end
+        end
+    end
+end)
+
+-- ---------- Misc: Auto Heal ----------
+-- Пример: ищем аптечку в инвентаре, используем, если здоровье ниже порога
+RunService.Heartbeat:Connect(function()
+    if Settings.AutoHeal and Humanoid then
+        if Humanoid.Health < Settings.HealThreshold then
+            -- Ищем в бэкпаке инструмент с названием "Medkit" или "Bandage"
+            local backpack = LocalPlayer:FindFirstChild("Backpack")
+            if backpack then
+                for _, item in ipairs(backpack:GetChildren()) do
+                    if item:IsA("Tool") and (item.Name:lower():find("med") or item.Name:lower():find("bandage") or item.Name:lower():find("health")) then
+                        -- Используем предмет
+                        item:Activate()
+                        break
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ---------- Создание элементов UI ----------
+-- Aimbot Tab
+local aimbotSection = AimbotTab:CreateSection("Aimbot Settings")
+
+AimbotTab:CreateToggle({
+    Name = "Enable Aimbot",
+    CurrentValue = false,
+    Flag = "AimbotEnabled",
+    Callback = function(Value)
+        Settings.AimbotEnabled = Value
+        DebugPrint("Aimbot: " .. tostring(Value))
+    end,
 })
 
-local RejoinButton = MiscTab:CreateButton({
-   Name = "Rejoin",
-   Callback = function()
-      game:GetService("TeleportService"):Teleport(game.PlaceId, game.Players.LocalPlayer)
-   end
+AimbotTab:CreateSlider({
+    Name = "Aimbot FOV",
+    Range = {10, 360},
+    Increment = 5,
+    CurrentValue = 120,
+    Flag = "AimbotFOV",
+    Callback = function(Value)
+        Settings.AimbotFOV = Value
+    end,
 })
 
-local InfiniteYield = MiscTab:CreateToggle({
-   Name = "Infinite Yield (Admin)",
-   CurrentValue = false,
-   Flag = "InfiniteYield",
-   Callback = function(Value)
-      if Value then
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
-      end
-   end
+AimbotTab:CreateSlider({
+    Name = "Smoothness",
+    Range = {0.1, 1},
+    Increment = 0.05,
+    CurrentValue = 0.3,
+    Flag = "AimbotSmooth",
+    Callback = function(Value)
+        Settings.AimbotSmoothness = Value
+    end,
 })
 
--- Load saved configuration
+AimbotTab:CreateDropdown({
+    Name = "Aim Part",
+    Options = {"Head", "Torso", "HumanoidRootPart"},
+    CurrentOption = "Head",
+    Flag = "AimPart",
+    Callback = function(Option)
+        Settings.AimbotPart = Option
+    end,
+})
+
+AimbotTab:CreateKeybind({
+    Name = "Aimbot Key",
+    CurrentKeybind = "MouseButton2",
+    Hold = true,
+    Flag = "AimbotKey",
+    Callback = function(Key)
+        Settings.AimbotKey = Key
+    end,
+})
+
+-- Visuals Tab
+local visualsSection = VisualsTab:CreateSection("ESP Settings")
+
+VisualsTab:CreateToggle({
+    Name = "Enable ESP",
+    CurrentValue = false,
+    Flag = "ESPEnabled",
+    Callback = function(Value)
+        Settings.ESPEnabled = Value
+        DebugPrint("ESP: " .. tostring(Value))
+    end,
+})
+
+VisualsTab:CreateToggle({
+    Name = "Box ESP",
+    CurrentValue = true,
+    Flag = "ESPBox",
+    Callback = function(Value)
+        Settings.ESPBox = Value
+    end,
+})
+
+VisualsTab:CreateToggle({
+    Name = "Name ESP",
+    CurrentValue = true,
+    Flag = "ESPName",
+    Callback = function(Value)
+        Settings.ESPName = Value
+    end,
+})
+
+VisualsTab:CreateToggle({
+    Name = "Health Bar",
+    CurrentValue = true,
+    Flag = "ESPHealth",
+    Callback = function(Value)
+        Settings.ESPHealth = Value
+    end,
+})
+
+VisualsTab:CreateToggle({
+    Name = "Distance",
+    CurrentValue = true,
+    Flag = "ESPDistance",
+    Callback = function(Value)
+        Settings.ESPDistance = Value
+    end,
+})
+
+VisualsTab:CreateToggle({
+    Name = "Team Colors",
+    CurrentValue = true,
+    Flag = "ESPTeamColor",
+    Callback = function(Value)
+        Settings.ESPTeamColor = Value
+    end,
+})
+
+VisualsTab:CreateToggle({
+    Name = "Wallhack (fake)",
+    CurrentValue = false,
+    Flag = "Wallhack",
+    Callback = function(Value)
+        Settings.Wallhack = Value
+        -- Здесь можно реализовать изменение прозрачности стен
+    end,
+})
+
+-- Movement Tab
+local movementSection = MovementTab:CreateSection("Movement Mods")
+
+MovementTab:CreateToggle({
+    Name = "Speed Hack",
+    CurrentValue = false,
+    Flag = "SpeedHack",
+    Callback = function(Value)
+        Settings.SpeedHackEnabled = Value
+        if not Value and Humanoid then
+            Humanoid.WalkSpeed = 16
+        end
+    end,
+})
+
+MovementTab:CreateSlider({
+    Name = "Speed Multiplier",
+    Range = {1, 10},
+    Increment = 0.5,
+    CurrentValue = 2,
+    Flag = "SpeedMult",
+    Callback = function(Value)
+        Settings.SpeedMultiplier = Value
+    end,
+})
+
+MovementTab:CreateToggle({
+    Name = "Infinite Jump",
+    CurrentValue = false,
+    Flag = "InfJump",
+    Callback = function(Value)
+        Settings.InfiniteJump = Value
+    end,
+})
+
+MovementTab:CreateToggle({
+    Name = "Noclip",
+    CurrentValue = false,
+    Flag = "Noclip",
+    Callback = function(Value)
+        Settings.Noclip = Value
+    end,
+})
+
+-- Weapons Tab
+local weaponsSection = WeaponsTab:CreateSection("Weapon Mods")
+
+WeaponsTab:CreateToggle({
+    Name = "Infinite Ammo",
+    CurrentValue = false,
+    Flag = "InfAmmo",
+    Callback = function(Value)
+        Settings.InfiniteAmmo = Value
+    end,
+})
+
+WeaponsTab:CreateToggle({
+    Name = "Fast Fire",
+    CurrentValue = false,
+    Flag = "FastFire",
+    Callback = function(Value)
+        Settings.FastFire = Value
+    end,
+})
+
+WeaponsTab:CreateToggle({
+    Name = "No Recoil",
+    CurrentValue = false,
+    Flag = "NoRecoil",
+    Callback = function(Value)
+        Settings.NoRecoil = Value
+    end,
+})
+
+WeaponsTab:CreateToggle({
+    Name = "No Spread",
+    CurrentValue = false,
+    Flag = "NoSpread",
+    Callback = function(Value)
+        Settings.NoSpread = Value
+    end,
+})
+
+-- Misc Tab
+local miscSection = MiscTab:CreateSection("Miscellaneous")
+
+MiscTab:CreateToggle({
+    Name = "Auto Heal",
+    CurrentValue = false,
+    Flag = "AutoHeal",
+    Callback = function(Value)
+        Settings.AutoHeal = Value
+    end,
+})
+
+MiscTab:CreateSlider({
+    Name = "Heal Threshold",
+    Range = {10, 80},
+    Increment = 5,
+    CurrentValue = 30,
+    Flag = "HealThreshold",
+    Callback = function(Value)
+        Settings.HealThreshold = Value
+    end,
+})
+
+-- Кнопка для спама в чат (пример)
+MiscTab:CreateButton({
+    Name = "Say 'Delta'",
+    Callback = function()
+        LocalPlayer:SendChatMessage("Delta is here!")
+    end,
+})
+
+-- ---------- Загрузка сохраненных настроек ----------
 Rayfield:LoadConfiguration()
+
+DebugPrint("Entrenched Delta Script Loaded!")
