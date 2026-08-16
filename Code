@@ -1,362 +1,345 @@
 --[[
-    UI с ESP и удалением тумана для MTA:SA (Мобильная версия)
+    Delta Exploit - ESP + No Fog Script (Mobile)
+    Активация по кнопке на экране
 ]]
 
--- ==================== НАСТРОЙКИ ====================
-local screenW, screenH = guiGetScreenSize()
-local isMobile = true
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lightning")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
--- ==================== СОЗДАНИЕ UI ====================
+-- НАСТРОЙКИ
+local ESPEnabled = false  -- По умолчанию выключено
+local ESPTeamCheck = true
+local BoxColor = Color3.fromRGB(0, 255, 0)
+local TextColor = Color3.fromRGB(255, 255, 255)
+local FogDisabled = false
 
-local gui = guiCreateWindow(
-    screenW * 0.05, 
-    screenH * 0.05, 
-    screenW * 0.90, 
-    screenH * 0.85, 
-    "ESP + Fog Remover", 
-    true
-)
-guiWindowSetSizable(gui, false)
-guiSetVisible(gui, false)
+-- Хранилище объектов ESP
+local ESPObjects = {}
+local ESPFolder = Instance.new("Folder")
+ESPFolder.Name = "ESP_Folder"
+ESPFolder.Parent = game.CoreGui
 
--- Вкладки
-local tabPanel = guiCreateTabPanel(0.02, 0.07, 0.96, 0.88, true, gui)
-local tabESP = guiCreateTab("ESP", tabPanel)
-local tabSettings = guiCreateTab("Настройки", tabPanel)
-
--- ==================== ВКЛАДКА ESP ====================
-
-local function createMobileCheckBox(text, x, y, w, h, parent)
-    local cb = guiCreateCheckBox(x, y, w, h, text, false, true, parent)
-    guiSetFont(cb, "default-bold-small")
-    return cb
-end
-
-local chkESP = createMobileCheckBox("Включить ESP", 0.03, 0.03, 0.94, 0.08, tabESP)
-local chkBox = createMobileCheckBox("Показывать Box", 0.03, 0.13, 0.94, 0.08, tabESP)
-local chkLine = createMobileCheckBox("Показывать Lines", 0.03, 0.23, 0.94, 0.08, tabESP)
-local chkName = createMobileCheckBox("Показывать имена", 0.03, 0.33, 0.94, 0.08, tabESP)
-local chkHealth = createMobileCheckBox("Показывать здоровье", 0.03, 0.43, 0.94, 0.08, tabESP)
-
--- Выбор цвета
-local lblColor = guiCreateLabel(0.03, 0.53, 0.30, 0.06, "Цвет Box:", true, tabESP)
-guiSetFont(lblColor, "default-bold-small")
-local colorEdit = guiCreateEdit(0.35, 0.53, 0.40, 0.08, "#00FF00", true, tabESP)
-guiSetFont(colorEdit, "default-bold-small")
-
--- Кнопки цвета (ИСПРАВЛЕНО)
-local function createColorBtn(text, x, y, color, parent)
-    local btn = guiCreateButton(x, y, 0.18, 0.08, text, true, parent)
-    guiSetFont(btn, "default-bold-small")
-    -- Правильный формат цвета для MTA
-    guiSetProperty(btn, "NormalTextColour", "FF" .. color)
-    return btn
-end
-
-local btnRed = createColorBtn("Красный", 0.03, 0.62, "FF0000", tabESP)
-local btnGreen = createColorBtn("Зеленый", 0.22, 0.62, "00FF00", tabESP)
-local btnBlue = createColorBtn("Синий", 0.41, 0.62, "0000FF", tabESP)
-local btnYellow = createColorBtn("Желтый", 0.60, 0.62, "FFFF00", tabESP)
-local btnWhite = createColorBtn("Белый", 0.79, 0.62, "FFFFFF", tabESP)
-
--- Размер
-local lblSize = guiCreateLabel(0.03, 0.72, 0.40, 0.06, "Размер Box:", true, tabESP)
-guiSetFont(lblSize, "default-bold-small")
-local sizeSlider = guiCreateScrollBar(0.03, 0.80, 0.94, 0.08, true, true, tabESP)
-guiScrollBarSetScrollPosition(sizeSlider, 50)
-
--- ==================== ВКЛАДКА НАСТРОЙКИ ====================
-
-local chkFog = createMobileCheckBox("Удалить туман", 0.03, 0.03, 0.94, 0.08, tabSettings)
-
--- Дальность
-local lblDist = guiCreateLabel(0.03, 0.13, 0.40, 0.06, "Дальность:", true, tabSettings)
-guiSetFont(lblDist, "default-bold-small")
-local distSlider = guiCreateScrollBar(0.03, 0.21, 0.94, 0.08, true, true, tabSettings)
-guiScrollBarSetScrollPosition(distSlider, 100)
-
--- Кнопка применения (ИСПРАВЛЕНО)
-local btnApply = guiCreateButton(0.25, 0.35, 0.50, 0.12, "ПРИМЕНИТЬ", true, tabSettings)
-guiSetFont(btnApply, "default-bold-small")
-guiSetProperty(btnApply, "NormalTextColour", "FF00FF00") -- Правильный формат
-
--- Статус
-local lblStatus = guiCreateLabel(0.03, 0.52, 0.94, 0.08, "Статус: Ожидание", true, tabSettings)
-guiSetFont(lblStatus, "default-bold-small")
-guiLabelSetColor(lblStatus, 255, 255, 0)
-
--- ==================== ПЛАВАЮЩАЯ КНОПКА ====================
-
-local toggleBtn = guiCreateButton(
-    screenW * 0.85, 
-    screenH * 0.80, 
-    screenW * 0.12, 
-    screenH * 0.07,
-    "🔍 ESP", 
-    false
-)
-guiSetFont(toggleBtn, "default-bold-small")
-guiSetProperty(toggleBtn, "NormalTextColour", "FF00FF00")
-guiSetVisible(toggleBtn, true)
-
--- Перетаскивание кнопки
-local dragging = false
-local dragOffX, dragOffY = 0, 0
-
-addEventHandler("onClientGUIClick", toggleBtn, function(button, state)
-    if button == "left" and state == "down" then
-        if isMobile then
-            dragging = true
-            local x, y = guiGetPosition(toggleBtn, false)
-            local mx, my = getCursorPosition()
-            dragOffX = mx * screenW - x
-            dragOffY = my * screenH - y
+-- СОЗДАНИЕ КНОПКИ НА ЭКРАНЕ
+local function CreateToggleButton()
+    -- Главный контейнер кнопки
+    local ButtonContainer = Instance.new("ScreenGui")
+    ButtonContainer.Name = "ESP_Button"
+    ButtonContainer.Parent = game.CoreGui
+    ButtonContainer.IgnoreGuiInset = true
+    
+    -- Основная кнопка
+    local Button = Instance.new("ImageButton")
+    Button.Name = "ToggleButton"
+    Button.Parent = ButtonContainer
+    Button.Size = UDim2.new(0, 70, 0, 70)
+    Button.Position = UDim2.new(0, 20, 0, 100)  -- Левый верхний угол
+    Button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    Button.BackgroundTransparency = 0.3
+    Button.BorderSizePixel = 0
+    Button.Image = "rbxassetid://6023420947"  -- Иконка глаза
+    Button.ImageColor3 = Color3.fromRGB(200, 200, 200)
+    Button.ImageTransparency = 0.2
+    Button.ZIndex = 999
+    
+    -- Эффекты при наведении
+    local UIStroke = Instance.new("UIStroke")
+    UIStroke.Parent = Button
+    UIStroke.Color = Color3.fromRGB(0, 255, 0)
+    UIStroke.Thickness = 2
+    UIStroke.Transparency = 0.5
+    
+    local UICorner = Instance.new("UICorner")
+    UICorner.Parent = Button
+    UICorner.CornerRadius = UDim.new(1, 0)  -- Круглая кнопка
+    
+    -- Текст статуса
+    local StatusLabel = Instance.new("TextLabel")
+    StatusLabel.Name = "Status"
+    StatusLabel.Parent = Button
+    StatusLabel.Size = UDim2.new(1, 0, 0.4, 0)
+    StatusLabel.Position = UDim2.new(0, 0, 0.6, 0)
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.Text = "OFF"
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    StatusLabel.TextScaled = true
+    StatusLabel.Font = Enum.Font.GothamBold
+    StatusLabel.ZIndex = 1000
+    
+    -- Кнопка для перетаскивания (увеличенная зона)
+    local DragArea = Instance.new("TextButton")
+    DragArea.Name = "DragArea"
+    DragArea.Parent = ButtonContainer
+    DragArea.Size = UDim2.new(0, 100, 0, 100)
+    DragArea.Position = Button.Position - UDim2.new(0, 15, 0, 15)
+    DragArea.BackgroundTransparency = 1
+    DragArea.Text = ""
+    DragArea.ZIndex = 998
+    
+    -- Переменные для перетаскивания
+    local dragging = false
+    local dragStart
+    local startPos
+    
+    DragArea.MouseButton1Down:Connect(function(x, y)
+        dragging = true
+        dragStart = Vector2.new(x, y)
+        startPos = Button.Position
+        DragArea.ZIndex = 1001
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = Vector2.new(input.Position.X, input.Position.Y) - dragStart
+            Button.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+            DragArea.Position = Button.Position - UDim2.new(0, 15, 0, 15)
         end
-    elseif state == "up" and not dragging then
-        -- Открываем меню только если не перетаскивали
-        local visible = guiGetVisible(gui)
-        guiSetVisible(gui, not visible)
-        showCursor(not visible)
-    end
-end, false)
-
--- Обработчик перетаскивания
-addEventHandler("onClientMouseMove", root, function(_, _, x, y)
-    if dragging then
-        local newX = x - dragOffX
-        local newY = y - dragOffY
-        newX = math.max(0, math.min(screenW - screenW * 0.12, newX))
-        newY = math.max(0, math.min(screenH - screenH * 0.07, newY))
-        guiSetPosition(toggleBtn, newX, newY, false)
-    end
-end)
-
--- Сброс перетаскивания при отпускании кнопки мыши
-addEventHandler("onClientMouseUp", root, function()
-    dragging = false
-end)
-
--- ==================== ПЕРЕМЕННЫЕ ====================
-
-local espEnabled = false
-local fogRemoved = false
-local espColor = {r = 0, g = 255, b = 0}
-
--- ==================== ФУНКЦИИ ====================
-
--- Конвертация HEX в RGB (ИСПРАВЛЕНО)
-local function hexToRgb(hex)
-    if not hex then return 0, 255, 0 end
-    hex = hex:gsub("#", "")
-    if #hex == 6 then
-        local r = tonumber("0x"..hex:sub(1,2)) or 0
-        local g = tonumber("0x"..hex:sub(3,4)) or 255
-        local b = tonumber("0x"..hex:sub(5,6)) or 0
-        return r, g, b
-    end
-    return 0, 255, 0
-end
-
--- Удаление тумана
-local function toggleFog(remove)
-    if remove then
-        setWeather(0)
-        setFarClipDistance(5000)
-        setFogDistance(5000, 5000)
-        fogRemoved = true
-        guiLabelSetText(lblStatus, "✅ Туман удален")
-        guiLabelSetColor(lblStatus, 0, 255, 0)
-    else
-        setWeather(-1)
-        resetFarClipDistance()
-        resetFogDistance()
-        fogRemoved = false
-        guiLabelSetText(lblStatus, "🔄 Туман восстановлен")
-        guiLabelSetColor(lblStatus, 255, 255, 0)
-    end
-end
-
--- Применение настроек
-local function applySettings()
-    local fogState = guiCheckBoxGetSelected(chkFog)
-    toggleFog(fogState)
+    end)
     
-    local distValue = guiScrollBarGetScrollPosition(distSlider)
-    local distance = 100 + (distValue * 50)
-    setFogDistance(distance, distance)
-    setFarClipDistance(distance)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+            DragArea.ZIndex = 998
+        end
+    end)
     
-    local hex = guiGetText(colorEdit)
-    espColor.r, espColor.g, espColor.b = hexToRgb(hex)
-    
-    espEnabled = guiCheckBoxGetSelected(chkESP)
-    if espEnabled then
-        guiLabelSetText(lblStatus, "✅ ESP активирован")
-        guiLabelSetColor(lblStatus, 0, 255, 0)
-    else
-        guiLabelSetText(lblStatus, "⛔ ESP отключен")
-        guiLabelSetColor(lblStatus, 255, 255, 0)
-    end
-end
-
--- Быстрая смена цвета
-local function setColor(hex)
-    guiSetText(colorEdit, hex)
-    applySettings()
-end
-
--- Звук клика (ИСПРАВЛЕНО)
-local function playClick()
-    -- Используем существующий звук
-    playSoundFrontEnd(2) -- Звук клика по кнопке
-end
-
--- ==================== ОБРАБОТЧИКИ ====================
-
-addEventHandler("onClientGUIClick", btnApply, function()
-    playClick()
-    applySettings()
-end, false)
-
-addEventHandler("onClientGUIClick", chkFog, function()
-    playClick()
-    applySettings()
-end, false)
-
--- Кнопки цвета
-addEventHandler("onClientGUIClick", btnRed, function()
-    playClick()
-    setColor("#FF0000")
-end, false)
-
-addEventHandler("onClientGUIClick", btnGreen, function()
-    playClick()
-    setColor("#00FF00")
-end, false)
-
-addEventHandler("onClientGUIClick", btnBlue, function()
-    playClick()
-    setColor("#0000FF")
-end, false)
-
-addEventHandler("onClientGUIClick", btnYellow, function()
-    playClick()
-    setColor("#FFFF00")
-end, false)
-
-addEventHandler("onClientGUIClick", btnWhite, function()
-    playClick()
-    setColor("#FFFFFF")
-end, false)
-
-addEventHandler("onClientGUIChanged", colorEdit, applySettings, false)
-
--- Закрытие по ESC
-addEventHandler("onClientKey", root, function(key, press)
-    if key == "escape" and press and guiGetVisible(gui) then
-        guiSetVisible(gui, false)
-        showCursor(false)
-    end
-end)
-
--- ==================== ESP РЕНДЕРИНГ ====================
-
-local function renderESP()
-    if not espEnabled then return end
-    
-    local showBox = guiCheckBoxGetSelected(chkBox)
-    local showLine = guiCheckBoxGetSelected(chkLine)
-    local showName = guiCheckBoxGetSelected(chkName)
-    local showHealth = guiCheckBoxGetSelected(chkHealth)
-    
-    local r, g, b = espColor.r, espColor.g, espColor.b
-    local boxSize = guiScrollBarGetScrollPosition(sizeSlider) / 100 + 0.5
-    
-    local localPlayer = getLocalPlayer()
-    if not localPlayer then return end
-    
-    local localX, localY, localZ = getElementPosition(localPlayer)
-    
-    for _, player in ipairs(getElementsByType("player")) do
-        if player ~= localPlayer then
-            local x, y, z = getElementPosition(player)
-            if not x then break end
+    -- Функция обновления статуса кнопки
+    local function UpdateButtonStatus()
+        if ESPEnabled then
+            StatusLabel.Text = "ON"
+            StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+            UIStroke.Color = Color3.fromRGB(0, 255, 0)
+            Button.ImageColor3 = Color3.fromRGB(255, 255, 255)
             
-            local dist = getDistanceBetweenPoints3D(localX, localY, localZ, x, y, z)
-            if dist > 300 then break end
+            -- Анимация включения
+            TweenService:Create(Button, TweenInfo.new(0.3), {
+                BackgroundTransparency = 0.1
+            }):Play()
+        else
+            StatusLabel.Text = "OFF"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+            UIStroke.Color = Color3.fromRGB(255, 0, 0)
+            Button.ImageColor3 = Color3.fromRGB(200, 200, 200)
             
-            local sx, sy, visible = getScreenFromWorldPosition(x, y, z + 0.8)
-            if sx and sy and visible then
-                local size = boxSize * (50 / math.max(dist, 1) * 10)
-                size = math.min(size, 200)
-                
-                if showBox then
-                    dxDrawRectangle(sx - size/2, sy - size, size, size * 2, tocolor(r, g, b, 150))
-                    dxDrawRectangle(sx - size/2, sy - size, size, 2, tocolor(r, g, b, 255))
-                    dxDrawRectangle(sx - size/2, sy + size, size, 2, tocolor(r, g, b, 255))
-                    dxDrawRectangle(sx - size/2, sy - size, 2, size * 2, tocolor(r, g, b, 255))
-                    dxDrawRectangle(sx + size/2 - 2, sy - size, 2, size * 2, tocolor(r, g, b, 255))
-                end
-                
-                if showLine then
-                    local centerX, centerY = screenW/2, screenH/2
-                    dxDrawLine(centerX, centerY, sx, sy, tocolor(r, g, b, 100), 2)
-                end
-                
-                if showName then
-                    local name = getPlayerName(player)
-                    -- Убираем HEX теги из имени (ИСПРАВЛЕНО)
-                    name = name:gsub("#%x%x%x%x%x%x", "")
-                    dxDrawText(name, sx - 50, sy - size - 25, sx + 50, sy - size - 5, 
-                        tocolor(255, 255, 255, 200), 0.6, "default-bold", "center", "bottom")
-                end
-                
-                if showHealth then
-                    local health = getElementHealth(player)
-                    local healthPercent = math.min(health / 100, 1)
-                    local healthColor = tocolor(255 - healthPercent * 255, healthPercent * 255, 0, 200)
-                    
-                    dxDrawRectangle(sx - size/2, sy + size + 5, size * healthPercent, 4, healthColor)
-                    dxDrawRectangle(sx - size/2, sy + size + 5, size, 1, tocolor(0, 0, 0, 100))
-                end
+            TweenService:Create(Button, TweenInfo.new(0.3), {
+                BackgroundTransparency = 0.3
+            }):Play()
+        end
+    end
+    
+    -- Нажатие на кнопку
+    Button.MouseButton1Click:Connect(function()
+        ESPEnabled = not ESPEnabled
+        
+        if ESPEnabled then
+            -- Включаем ESP и туман
+            if not FogDisabled then
+                DisableFog()
+                FogDisabled = true
+            end
+            print("[Delta] ESP Включен!")
+        else
+            -- Выключаем ESP
+            for player, _ in pairs(ESPObjects) do
+                RemoveESP(player)
+            end
+            print("[Delta] ESP Выключен!")
+        end
+        
+        UpdateButtonStatus()
+    end)
+    
+    -- Двойной тап для сброса позиции
+    local lastTap = 0
+    Button.MouseButton1Down:Connect(function()
+        if tick() - lastTap < 0.3 then
+            -- Сброс позиции
+            Button.Position = UDim2.new(0, 20, 0, 100)
+            DragArea.Position = Button.Position - UDim2.new(0, 15, 0, 15)
+        end
+        lastTap = tick()
+    end)
+    
+    -- Обновляем начальный статус
+    UpdateButtonStatus()
+    
+    return ButtonContainer
+end
+
+-- ОТКЛЮЧЕНИЕ ТУМАНА
+local function DisableFog()
+    Lighting.FogEnd = 999999
+    Lighting.FogStart = 0
+    Lighting.FogColor = Color3.fromRGB(0, 0, 0)
+    if Lighting:FindFirstChild("Atmosphere") then
+        Lighting.Atmosphere:Destroy()
+    end
+    print("[Delta] Туман отключён!")
+end
+
+-- ФУНКЦИИ ESP (без изменений)
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+    if ESPObjects[player] then return end
+    
+    local esp = {
+        Box = Instance.new("BoxHandleAdornment"),
+        Name = Instance.new("BillboardGui"),
+        NameLabel = Instance.new("TextLabel"),
+        Distance = Instance.new("BillboardGui"),
+        DistLabel = Instance.new("TextLabel")
+    }
+    
+    esp.Box.Size = Vector3.new(3, 5, 1)
+    esp.Box.Adornee = player.Character and player.Character:FindFirstChild("HumanoidRootPart") or nil
+    esp.Box.AlwaysOnTop = true
+    esp.Box.ZIndex = 10
+    esp.Box.Color3 = BoxColor
+    esp.Box.Transparency = 0.3
+    esp.Box.Parent = ESPFolder
+    
+    esp.Name.Size = UDim2.new(0, 150, 0, 30)
+    esp.Name.AlwaysOnTop = true
+    esp.Name.Adornee = player.Character and player.Character:FindFirstChild("Head") or nil
+    esp.Name.Parent = ESPFolder
+    
+    esp.NameLabel.Size = UDim2.new(1, 0, 1, 0)
+    esp.NameLabel.BackgroundTransparency = 1
+    esp.NameLabel.TextColor3 = TextColor
+    esp.NameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    esp.NameLabel.TextStrokeTransparency = 0.3
+    esp.NameLabel.TextScaled = true
+    esp.NameLabel.Font = Enum.Font.GothamBold
+    esp.NameLabel.Text = player.Name
+    esp.NameLabel.Parent = esp.Name
+    
+    esp.Distance.Size = UDim2.new(0, 100, 0, 25)
+    esp.Distance.AlwaysOnTop = true
+    esp.Distance.Adornee = player.Character and player.Character:FindFirstChild("Head") or nil
+    esp.Distance.Parent = ESPFolder
+    esp.Distance.StudsOffset = Vector3.new(0, -2, 0)
+    
+    esp.DistLabel.Size = UDim2.new(1, 0, 1, 0)
+    esp.DistLabel.BackgroundTransparency = 1
+    esp.DistLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    esp.DistLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    esp.DistLabel.TextStrokeTransparency = 0.3
+    esp.DistLabel.TextScaled = true
+    esp.DistLabel.Font = Enum.Font.Gotham
+    esp.DistLabel.Text = "0m"
+    esp.DistLabel.Parent = esp.Distance
+    
+    ESPObjects[player] = esp
+end
+
+local function RemoveESP(player)
+    if ESPObjects[player] then
+        for _, obj in pairs(ESPObjects[player]) do
+            if obj and obj.Parent then
+                obj:Destroy()
             end
         end
+        ESPObjects[player] = nil
     end
 end
 
-addEventHandler("onClientRender", root, renderESP)
-
--- ==================== ОЧИСТКА ====================
-
-addEventHandler("onClientResourceStop", resourceRoot, function()
-    if fogRemoved then
-        setWeather(-1)
-        resetFarClipDistance()
-        resetFogDistance()
+local function UpdateESP()
+    if not ESPEnabled then return end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            if ESPTeamCheck and player.Team == LocalPlayer.Team then
+                RemoveESP(player)
+                continue
+            end
+            
+            if not ESPObjects[player] then
+                CreateESP(player)
+            end
+            
+            local esp = ESPObjects[player]
+            if esp and esp.Box then
+                esp.Box.Adornee = player.Character.HumanoidRootPart
+                esp.Box.CFrame = player.Character.HumanoidRootPart.CFrame
+                
+                local humanoid = player.Character:FindFirstChild("Humanoid")
+                if humanoid then
+                    local healthPercent = humanoid.Health / humanoid.MaxHealth
+                    esp.Box.Color3 = Color3.fromRGB(
+                        255 * (1 - healthPercent),
+                        255 * healthPercent,
+                        0
+                    )
+                end
+            end
+            
+            if esp and esp.Name then
+                esp.Name.Adornee = player.Character:FindFirstChild("Head") or player.Character.HumanoidRootPart
+            end
+            if esp and esp.Distance then
+                esp.Distance.Adornee = player.Character:FindFirstChild("Head") or player.Character.HumanoidRootPart
+                local dist = (player.Character.HumanoidRootPart.Position - (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position or Vector3.new(0,0,0))).Magnitude
+                esp.DistLabel.Text = math.floor(dist) .. "m"
+            end
+        else
+            RemoveESP(player)
+        end
     end
-    removeEventHandler("onClientRender", root, renderESP)
-    showCursor(false)
+end
+
+Players.PlayerRemoving:Connect(function(player)
+    RemoveESP(player)
 end)
 
--- ==================== АДАПТАЦИЯ ЭКРАНА ====================
-
-addEventHandler("onClientScreenResize", root, function()
-    screenW, screenH = guiGetScreenSize()
-    local btnX = screenW * 0.85
-    local btnY = screenH * 0.80
-    guiSetPosition(toggleBtn, btnX, btnY, false)
+-- ОСНОВНОЙ ЦИКЛ
+RunService.RenderStepped:Connect(function()
+    UpdateESP()
 end)
 
--- ==================== ЧАТ КОМАНДЫ ====================
+-- КОМАНДЫ ЧЕРЕЗ ЧАТ
+local function SetupCommands()
+    local ChatService = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+    if ChatService then
+        ChatService.OnMessageDoneFiltering.OnClientEvent:Connect(function(messageData)
+            if messageData.FromSpeaker == LocalPlayer.Name then
+                local msg = messageData.Message:lower()
+                if msg == "!esp on" then
+                    ESPEnabled = true
+                    if not FogDisabled then
+                        DisableFog()
+                        FogDisabled = true
+                    end
+                    print("[Delta] ESP Включен через команду!")
+                elseif msg == "!esp off" then
+                    ESPEnabled = false
+                    for player, _ in pairs(ESPObjects) do
+                        RemoveESP(player)
+                    end
+                    print("[Delta] ESP Выключен через команду!")
+                elseif msg == "!fog off" then
+                    DisableFog()
+                    FogDisabled = true
+                elseif msg == "!team" then
+                    ESPTeamCheck = not ESPTeamCheck
+                    print("[Delta] Проверка команды: " .. tostring(ESPTeamCheck))
+                end
+            end
+        end)
+    end
+end
 
-outputChatBox("📱 [ESP] Мобильная версия загружена!", 0, 255, 0)
-outputChatBox("💡 Нажмите зеленую кнопку 🔍 ESP в правом нижнем углу", 0, 255, 255)
-outputChatBox("🔄 Перетащите кнопку для удобства", 0, 255, 255)
-
-addCommandHandler("esp", function()
-    local visible = guiGetVisible(gui)
-    guiSetVisible(gui, not visible)
-    showCursor(not visible)
-end)
-
-print("✅ Мобильный ESP успешно загружен!")
+-- ЗАПУСК
+CreateToggleButton()
+SetupCommands()
+print("[Delta] ESP + Кнопка загружены!")
+print("Нажмите на кнопку в левом верхнем углу для включения ESP")
+print("Команды в чате: !esp on, !esp off, !fog off, !team")
