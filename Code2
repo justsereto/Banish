@@ -1,50 +1,439 @@
-debugX = true
+--[[
+	WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+]]
+local player = game.Players.LocalPlayer
+local playerGui = player:FindFirstChild("PlayerGui")
+if not playerGui then return end
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- Create ScreenGui
+local gui = Instance.new("ScreenGui")
+gui.Name = "BrGUI"
+gui.Parent = playerGui
 
-local Window = Rayfield:CreateWindow({
-   Name = "Rayfield Example Window",
-   Icon = 0, -- Icon in Topbar. Can use Lucide Icons (string) or Roblox Image (number). 0 to use no icon (default).
-   LoadingTitle = "Rayfield Interface Suite",
-   LoadingSubtitle = "by Sirius",
-   Theme = "Default", -- Check https://docs.sirius.menu/rayfield/configuration/themes
+-- Create Main Frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 400, 0, 300)
+mainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+mainFrame.BorderSizePixel = 2
+mainFrame.Active = true
+mainFrame.Draggable = true -- Makes GUI movable
+mainFrame.Parent = gui
 
-   DisableRayfieldPrompts = false,
-   DisableBuildWarnings = false, -- Prevents Rayfield from warning when the script has a version mismatch with the interface
+-- Create Tabs
+local tabs = {"Main", "Information"}
+local tabFrames = {}
+local tabButtons = {}
 
-   ConfigurationSaving = {
-      Enabled = true,
-      FolderName = nil, -- Create a custom folder for your hub/game
-      FileName = "Big Hub"
-   },
+for i, tab in ipairs(tabs) do
+	local tabButton = Instance.new("TextButton")
+	tabButton.Size = UDim2.new(0.5, -2, 0, 30)
+	tabButton.Position = UDim2.new((i - 1) * 0.5, 0, 0, 0)
+	tabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	tabButton.TextColor3 = Color3.fromRGB(255, 0, 0)
+	tabButton.Font = Enum.Font.GothamBold
+	tabButton.Text = tab
+	tabButton.Parent = mainFrame
 
-   Discord = {
-      Enabled = false, -- Prompt the user to join your Discord server if their executor supports it
-      Invite = "noinvitelink", -- The Discord invite code, do not include discord.gg/. E.g. discord.gg/ ABCD would be ABCD
-      RememberJoins = true -- Set this to false to make them join the discord every time they load it up
-   },
+	local tabFrame = Instance.new("Frame")
+	tabFrame.Size = UDim2.new(1, 0, 1, -30)
+	tabFrame.Position = UDim2.new(0, 0, 0, 30)
+	tabFrame.BackgroundTransparency = 1
+	tabFrame.Visible = (tab == "Main")
+	tabFrame.Parent = mainFrame
 
-   KeySystem = false, -- Set this to true to use our key system
-   KeySettings = {
-      Title = "Untitled",
-      Subtitle = "Key System",
-      Note = "No method of obtaining the key is provided", -- Use this to tell the user how to get a key
-      FileName = "Key", -- It is recommended to use something unique as other scripts using Rayfield may overwrite your key file
-      SaveKey = true, -- The user's key will be saved, but if you change the key, they will be unable to use your script
-      GrabKeyFromSite = false, -- If this is true, set Key below to the RAW site you would like Rayfield to get the key from
-      Key = {"Hello"} -- List of keys that will be accepted by the system, can be RAW file links (pastebin, github etc) or simple strings ("hello","key22")
-   }
-})
+	tabButtons[tab] = tabButton
+	tabFrames[tab] = tabFrame
 
-local Tab = Window:CreateTab("Tab Example", 4483362458) -- Title, Image
+	tabButton.MouseButton1Click:Connect(function()
+		for _, frame in pairs(tabFrames) do
+			frame.Visible = false
+		end
+		tabFrame.Visible = true
+	end)
+end
 
-local Section = Tab:CreateSection("Section Example")
+-- Function to create a button
+local function createButton(tab, text, callback)
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.new(0.9, 0, 0, 30)
+	button.Position = UDim2.new(0.05, 0, #tabFrames[tab]:GetChildren() * 0.1, 0)
+	button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.Font = Enum.Font.GothamBold
+	button.Text = text
+	button.Parent = tabFrames[tab]
+	button.MouseButton1Click:Connect(callback)
+end
 
-local Button = Tab:CreateButton({
-   Name = "Button Example",
-   Callback = function()
-   -- The function that takes place when the button is pressed
-   end,
-})
+-- Main Tab Buttons
+createButton("Main", "Decal Spam", function()
+	local decalID = 169585459
 
-Rayfield:LoadConfiguration()
+	function applyDecals(root)
+		for _, v in pairs(root:GetChildren()) do
+			if v:IsA("Decal") and v.Texture ~= "http://www.roblox.com/asset/?id=" .. decalID then
+				v:Destroy()
+			elseif v:IsA("BasePart") then
+				v.Material = "Plastic"
+				v.Transparency = 0
+
+				-- Add decals to all faces
+				local faces = {"Front", "Back", "Right", "Left", "Top", "Bottom"}
+				for _, face in ipairs(faces) do
+					local decal = Instance.new("Decal", v)
+					decal.Texture = "http://www.roblox.com/asset/?id=" .. decalID
+					decal.Face = face
+				end
+			end
+			applyDecals(v) -- Recursive call for children
+		end
+	end
+
+	applyDecals(game.Workspace)
+end)
+
+createButton("Main", "Set Skybox", function()
+	local skyboxID = 169585459
+
+	local sky = Instance.new("Sky")
+	sky.Name = "CustomSky"
+	sky.Parent = game.Lighting
+	sky.SkyboxBk = "http://www.roblox.com/asset/?id=" .. skyboxID
+	sky.SkyboxDn = "http://www.roblox.com/asset/?id=" .. skyboxID
+	sky.SkyboxFt = "http://www.roblox.com/asset/?id=" .. skyboxID
+	sky.SkyboxLf = "http://www.roblox.com/asset/?id=" .. skyboxID
+	sky.SkyboxRt = "http://www.roblox.com/asset/?id=" .. skyboxID
+	sky.SkyboxUp = "http://www.roblox.com/asset/?id=" .. skyboxID
+
+	game.Lighting.TimeOfDay = 12
+end)
+
+createButton("Main", "Hint", function()
+	local hint = Instance.new("Hint", game.Workspace)
+	hint.Text = "BanForReport: REST IN HELL"
+end)
+
+createButton("Main", "Jumpscare", function()
+	local jumpscareSound = Instance.new("Sound", workspace)
+	jumpscareSound.Name = "JumpscareSound"
+	jumpscareSound.Volume = 9999999999999999
+	jumpscareSound.Pitch = 1
+	jumpscareSound.SoundId = "rbxassetid:/7236490488/"
+
+	local jumpscareGUI = Instance.new("ScreenGui", nil)
+	jumpscareGUI.Name = "Jumpscare"
+	local image = Instance.new("ImageLabel", jumpscareGUI)
+	image.Name = "JumpscareImage"
+	image.BackgroundColor3 = Color3.new(0, 0, 0)
+	image.BorderColor3 = Color3.new(255, 255, 255)
+	image.BorderSizePixel = 0
+	image.Size = UDim2.new(1, 0, 1, 0)
+	image.Image = "http://www.roblox.com/asset/?id=169585459"
+	image.Active = true
+
+	for i, c in pairs(game.Players:GetChildren()) do
+		local jumpscareClone = jumpscareGUI:Clone()
+		jumpscareClone.Parent = c.PlayerGui
+	end
+	jumpscareSound:Play()
+	wait(5)
+	jumpscareSound:Destroy()
+	for i, c in pairs(game.Players:GetChildren()) do
+		c.PlayerGui.Jumpscare:Destroy()
+	end
+end)
+
+createButton("Main", "Kill All", function()
+	for _, p in pairs(game.Players:GetPlayers()) do
+		if p.Character and p.Character:FindFirstChild("Humanoid") then
+			p.Character.Humanoid.Health = 0
+		end
+	end
+end)
+
+createButton("Main", "Noob All", function()
+	local Players = game:GetService("Players")
+
+	-- Function to turn a player's character into a noob
+	local function turnToNoob(player)
+		player.CharacterAppearanceLoaded:Connect(function(character)
+			-- Set body colors to noob colors
+			local bodyColors = character:FindFirstChildOfClass("BodyColors")
+			if not bodyColors then
+				bodyColors = Instance.new("BodyColors")
+				bodyColors.Parent = character
+			end
+			bodyColors.HeadColor3 = Color3.fromRGB(255, 255, 0) -- Yellow
+			bodyColors.TorsoColor3 = Color3.fromRGB(13, 105, 172) -- Blue
+			bodyColors.LeftArmColor3 = Color3.fromRGB(13, 105, 172) -- Blue
+			bodyColors.RightArmColor3 = Color3.fromRGB(13, 105, 172) -- Blue
+			bodyColors.LeftLegColor3 = Color3.fromRGB(0, 255, 33) -- Green
+			bodyColors.RightLegColor3 = Color3.fromRGB(0, 255, 33) -- Green
+
+			-- Remove hats and accessories
+			for _, accessory in pairs(character:GetChildren()) do
+				if accessory:IsA("Accessory") then
+					accessory:Destroy()
+				end
+			end
+
+			-- Set the player's name to "Noob"
+			character.Humanoid.DisplayName = "Noob"
+		end)
+	end
+
+	-- Apply to all current players
+	for _, player in ipairs(Players:GetPlayers()) do
+		turnToNoob(player)
+	end
+
+	-- Apply to new players who join
+	Players.PlayerAdded:Connect(function(player)
+		player.CharacterAdded:Connect(function(character)
+			turnToNoob(player)
+		end)
+	end)
+end)
+
+createButton("Main", "Nuke Server", function()
+	local function nukeExplosion()
+		-- Create the explosion effect
+		local explosion = Instance.new("Explosion")
+		explosion.Position = Vector3.new(0, 100, 0) -- Set the nuke's location (you can change this to anywhere in your game)
+		explosion.BlastRadius = 100 -- How big the explosion radius is
+		explosion.BlastPressure = 10000 -- How much force the explosion applies
+		explosion.ExplosionType = Enum.ExplosionType.NoCraters -- Prevents craters
+		explosion.Parent = game.Workspace
+
+		-- Kill all players in range
+		for _, player in pairs(game.Players:GetPlayers()) do
+			if player.Character and (player.Character:FindFirstChild("HumanoidRootPart")) then
+				local distance = (player.Character.HumanoidRootPart.Position - explosion.Position).Magnitude
+				if distance <= explosion.BlastRadius then
+					player.Character:BreakJoints()
+				end
+			end
+		end
+
+		-- Play the explosion sound
+		local sound = Instance.new("Sound")
+		sound.SoundId = "rbxassetid://365003340"  -- Replace with your own nuke explosion sound
+		sound.Volume = 10
+		sound.Parent = game.Workspace
+		sound:Play()
+	end
+
+	-- Countdown timer
+	local countdown = 10 -- Time in seconds before the nuke goes off
+	for i = countdown, 1, -1 do
+		print("Nuke in " .. i .. " seconds...")
+		wait(1)
+	end
+
+	-- Trigger the nuke explosion after the countdown
+	nukeExplosion()
+end)
+
+-- Bomb Script
+createButton("Main", "Bomb", function()
+	local bomb = Instance.new("Tool")
+	bomb.Name = "Classic Bomb"
+	bomb.RequiresHandle = true
+	local handle = Instance.new("Part", bomb)
+	handle.Size = Vector3.new(1, 1, 1)
+	handle.Shape = Enum.PartType.Ball
+	handle.Material = Enum.Material.SmoothPlastic
+	handle.Color = Color3.fromRGB(255, 0, 0)
+	handle.Name = "Handle"
+
+	local explosion = Instance.new("Explosion")
+	explosion.BlastRadius = 10
+	explosion.BlastPressure = 500000
+
+	bomb.Activated:Connect(function()
+		explosion.Position = handle.Position
+		explosion.Parent = game.Workspace
+	end)
+
+	bomb.Parent = player.Backpack
+end)
+
+-- Spam Parts
+createButton("Main", "Spam Parts", function()
+	for i = 1, 100 do
+		local part = Instance.new("Part")
+		part.Size = Vector3.new(2, 2, 2)
+		part.Position = player.Character and player.Character:GetPrimaryPartCFrame().p + Vector3.new(math.random(-10, 10), 5, math.random(-10, 10)) or Vector3.new(0, 10, 0)
+		part.Material = Enum.Material.Neon
+		part.Color = Color3.fromRGB(255, 255, 255)
+		part.Anchored = false
+		part.Parent = game.Workspace
+	end
+end)
+
+-- More Button (Placeholder)
+createButton("Main", "666", function()
+	local Lighting = game:GetService("Lighting")
+	local Players = game:GetService("Players")
+	local Debris = game:GetService("Debris")
+
+	-- Store original lighting settings
+	local originalLighting = {
+		ClockTime = Lighting.ClockTime,
+		FogColor = Lighting.FogColor,
+		FogStart = Lighting.FogStart,
+		FogEnd = Lighting.FogEnd,
+		Ambient = Lighting.Ambient,
+		OutdoorAmbient = Lighting.OutdoorAmbient
+	}
+
+	-- Store original player states
+	local originalStates = {}
+
+	-- Capture the original state of a character
+	local function captureOriginalState(character)
+		local state = {}
+		for _, obj in ipairs(character:GetDescendants()) do
+			if obj:IsA("BasePart") then
+				state[obj] = {
+					Color = obj.Color,
+					Material = obj.Material,
+					Transparency = obj.Transparency
+				}
+			elseif obj:IsA("Decal") and obj.Name == "face" then
+				state[obj] = {
+					Texture = obj.Texture,
+					Transparency = obj.Transparency
+				}
+			end
+		end
+		return state
+	end
+
+	-- Restore a character to its original state
+	local function restoreOriginalState(character, state)
+		for obj, properties in pairs(state) do
+			if obj and obj.Parent then
+				for prop, value in pairs(properties) do
+					obj[prop] = value
+				end
+			end
+		end
+		local fire = character:FindFirstChild("HumanoidRootPart"):FindFirstChild("DarkModeFire")
+		if fire then fire:Destroy() end
+	end
+
+	-- Apply "666 Mode" to a character
+	local function apply666Effect(character)
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if not root then return end
+		for _, obj in ipairs(character:GetDescendants()) do
+			if obj:IsA("BasePart") then
+				obj.Color = Color3.fromRGB(0, 0, 0)
+				obj.Material = Enum.Material.SmoothPlastic
+			elseif obj:IsA("Decal") and obj.Name == "face" then
+				obj.Texture = "rbxassetid://45345525662"
+			end
+		end
+		local fire = Instance.new("Fire")
+		fire.Name = "DarkModeFire"
+		fire.Size = 15
+		fire.Heat = 50
+		fire.Color = Color3.fromRGB(255, 0, 0)
+		fire.SecondaryColor = Color3.fromRGB(255, 127, 0)
+		fire.Parent = root
+	end
+
+	-- Raining fire effect
+	local function spawnFire()
+		local fireball = Instance.new("Part")
+		fireball.Shape = Enum.PartType.Ball
+		fireball.Material = Enum.Material.Neon
+		fireball.Size = Vector3.new(8, 8, 8)
+		fireball.Position = Vector3.new(math.random(-50, 50), math.random(20, 100), math.random(-50, 50))
+		fireball.Anchored = true
+		fireball.CanCollide = false
+		fireball.Color = Color3.fromRGB(255, 100, 0)
+		fireball.Parent = workspace
+
+		local fire = Instance.new("Fire")
+		fire.Size = 25
+		fire.Heat = 50
+		fire.Color = Color3.fromRGB(255, 0, 0)
+		fire.SecondaryColor = Color3.fromRGB(255, 127, 0)
+		fire.Parent = fireball
+
+		local light = Instance.new("PointLight")
+		light.Color = Color3.fromRGB(255, 150, 0)
+		light.Range = 20
+		light.Brightness = 5
+		light.Parent = fireball
+
+		Debris:AddItem(fireball, 5)
+	end
+
+	-- Apply 666 Mode to all players
+	local function apply666ToAllPlayers()
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player.Character and not originalStates[player.UserId] then
+				originalStates[player.UserId] = captureOriginalState(player.Character)
+			end
+			if player.Character then
+				apply666Effect(player.Character)
+			end
+		end
+		Lighting.ClockTime = 0
+		Lighting.FogColor = Color3.fromRGB(0, 0, 0)
+		Lighting.FogStart = 0
+		Lighting.FogEnd = 300
+		Lighting.Ambient = Color3.fromRGB(0, 0, 0)
+		Lighting.OutdoorAmbient = Color3.fromRGB(0, 0, 0)
+	end
+
+	-- Remove 666 Mode and restore players
+	local function remove666Effect()
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player.Character and originalStates[player.UserId] then
+				restoreOriginalState(player.Character, originalStates[player.UserId])
+			end
+		end
+		Lighting.ClockTime = originalLighting.ClockTime
+		Lighting.FogColor = originalLighting.FogColor
+		Lighting.FogStart = originalLighting.FogStart
+		Lighting.FogEnd = originalLighting.FogEnd
+		Lighting.Ambient = originalLighting.Ambient
+		Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+	end
+
+	-- Start the raining fire
+	local function startRainingFire()
+		spawn(function()
+			while true do
+				spawnFire()
+				wait(0.5)
+			end
+		end)
+	end
+
+	-- Example usage:
+	-- Apply 666 Mode to all players
+	apply666ToAllPlayers()
+
+	-- Start raining fire
+	startRainingFire()
+
+	-- To remove 666 Mode, you can call:
+	-- remove666Effect()
+end)
+
+-- Information Tab
+local infoText = Instance.new("TextLabel")
+infoText.Size = UDim2.new(1, 0, 0, 50)
+infoText.Position = UDim2.new(0, 0, 0, 10)
+infoText.BackgroundTransparency = 1
+infoText.TextColor3 = Color3.fromRGB(255, 255, 255)
+infoText.Font = Enum.Font.GothamBold
+infoText.TextScaled = true
+infoText.Text = "Player: " .. player.Name .. "\nID: " .. player.UserId
+infoText.Parent = tabFrames["Information"]
